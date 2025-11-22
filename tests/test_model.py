@@ -25,7 +25,7 @@ def test_location_config_creation():
     assert config.id == "kitchen"
     assert config.parent_id is None
     assert config.kind == LocationKind.AREA
-    assert EventType.MOTION in config.timeouts
+    assert "motion" in config.timeouts
 
 
 def test_location_config_with_parent():
@@ -65,11 +65,13 @@ def test_occupancy_event_creation():
     now = datetime(2025, 1, 1, 12, 0, 0)
     event = OccupancyEvent(
         location_id="kitchen",
-        event_type=EventType.MOTION,
+        event_type=EventType.PULSE,
+        category="motion",
+        source_id="binary_sensor.motion",
         timestamp=now,
     )
     assert event.location_id == "kitchen"
-    assert event.event_type == EventType.MOTION
+    assert event.event_type == EventType.PULSE
     assert event.timestamp == now
     assert event.occupant_id is None
     assert event.duration is None
@@ -80,7 +82,9 @@ def test_occupancy_event_with_occupant():
     now = datetime(2025, 1, 1, 12, 0, 0)
     event = OccupancyEvent(
         location_id="kitchen",
-        event_type=EventType.DOOR,
+        event_type=EventType.PULSE,
+        category="door",
+        source_id="binary_sensor.door",
         timestamp=now,
         occupant_id="person.mike",
     )
@@ -93,6 +97,8 @@ def test_occupancy_event_with_duration():
     event = OccupancyEvent(
         location_id="sauna",
         event_type=EventType.MANUAL,
+        category="manual",
+        source_id="manual_override",
         timestamp=now,
         duration=timedelta(minutes=60),
     )
@@ -111,11 +117,18 @@ def test_engine_result_with_transitions():
     """Test EngineResult with state transitions."""
     now = datetime(2025, 1, 1, 12, 0, 0)
     state = LocationRuntimeState(is_occupied=True, occupied_until=now)
+    from occupancy_manager.model import StateTransition
+    transition = StateTransition(
+        location_id="kitchen",
+        previous_state=LocationRuntimeState(),
+        new_state=state,
+        reason="event",
+    )
     result = EngineResult(
         next_expiration=now,
-        transitions=[("kitchen", state)],
+        transitions=[transition],
     )
     assert len(result.transitions) == 1
-    assert result.transitions[0][0] == "kitchen"
-    assert result.transitions[0][1].is_occupied is True
+    assert result.transitions[0].location_id == "kitchen"
+    assert result.transitions[0].new_state.is_occupied is True
 

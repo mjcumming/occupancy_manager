@@ -18,14 +18,14 @@ class LocationKind(Enum):
 
 
 class EventType(Enum):
-    """Type of occupancy event."""
+    """Type of occupancy event (The Mechanic)."""
 
-    MOTION = "motion"  # Pulse event - resets timer
-    HOLD_START = "hold_start"  # Hold event - pauses timer
-    HOLD_END = "hold_end"  # Hold release - starts trailing timer
-    MANUAL = "manual"  # Manual override
-    LOCK_CHANGE = "lock_change"  # Lock state change
-    PROPAGATED = "propagated"  # Synthetic event for propagation
+    PULSE = "pulse"  # Momentary trigger (Motion, Door Trip) -> Resets timer
+    HOLD_START = "hold_start"  # Continuous start (Radar, Media Start) -> Pauses timer
+    HOLD_END = "hold_end"  # Continuous end (Radar, Media Stop) -> Starts trailing timer
+    MANUAL = "manual"  # Direct override
+    LOCK_CHANGE = "lock_change"
+    PROPAGATED = "propagated"  # Internal bubble-up
 
 
 class LockState(Enum):
@@ -38,8 +38,8 @@ class LockState(Enum):
 class OccupancyStrategy(Enum):
     """Occupancy strategy for a location."""
 
-    INDEPENDENT = "independent"  # Occupied only by own sensors or child propagation
-    FOLLOW_PARENT = "follow_parent"  # Occupied if own sensors trigger OR if Parent is Occupied
+    INDEPENDENT = "independent"
+    FOLLOW_PARENT = "follow_parent"
 
 
 @dataclass(frozen=True)
@@ -47,13 +47,13 @@ class LocationConfig:
     """Configuration for a location.
 
     Attributes:
-        id: Unique identifier for the location.
-        parent_id: Optional parent location ID for hierarchy.
-        kind: Type of location (AREA or VIRTUAL).
-        occupancy_strategy: Strategy for determining occupancy.
-        contributes_to_parent: If False, occupancy does not bubble up to parent.
-        timeouts: Dictionary mapping event categories to timeout minutes.
-            For Hold sources, this is the trailing timeout (fudge factor).
+        id: Unique identifier.
+        parent_id: Optional container location ID.
+        kind: Type of location.
+        occupancy_strategy: Strategy logic.
+        contributes_to_parent: If False, occupancy stops here.
+        timeouts: Dictionary mapping 'category' strings to minutes.
+            e.g. { "motion": 10, "door": 2, "my_custom_sensor": 5 }
     """
 
     id: str
@@ -61,29 +61,20 @@ class LocationConfig:
     kind: LocationKind = LocationKind.AREA
     occupancy_strategy: OccupancyStrategy = OccupancyStrategy.INDEPENDENT
     contributes_to_parent: bool = True
+
+    # Defaults are just data examples now, not hardcoded logic
     timeouts: dict[str, int] = field(
         default_factory=lambda: {
+            "default": 10,
             "motion": 10,
-            "presence": 2,
-            "media": 5,
+            "presence": 5,
         }
     )
 
 
 @dataclass(frozen=True)
 class LocationRuntimeState:
-    """Runtime state for a location.
-
-    This is immutable (frozen) to support functional updates.
-
-    Attributes:
-        is_occupied: Whether the location is currently occupied.
-        occupied_until: When the location's occupancy expires (if occupied).
-            Ignored if active_holds is non-empty.
-        active_occupants: Set of occupant IDs currently in this location.
-        active_holds: Set of source IDs currently holding the room open.
-        lock_state: Current lock state of the location.
-    """
+    """Runtime state for a location (Immutable)."""
 
     is_occupied: bool = False
     occupied_until: Optional[datetime] = None
@@ -97,14 +88,13 @@ class OccupancyEvent:
     """An occupancy event.
 
     Attributes:
-        location_id: The location where the event occurred.
-        event_type: Type of event (MOTION, HOLD_START, HOLD_END, MANUAL,
-            LOCK_CHANGE, PROPAGATED).
-        category: The config key to lookup timeout (e.g., "motion", "presence").
-        source_id: Unique ID of the device (e.g., "binary_sensor.radar").
-        timestamp: When the event occurred.
-        occupant_id: Optional identifier for the occupant.
-        duration: Optional override duration (e.g., for "Sauna=60m" scenarios).
+        location_id: Target location.
+        event_type: The mechanic (PULSE vs HOLD).
+        category: The config key for looking up timeout (e.g. "motion").
+        source_id: Unique device ID (e.g. "binary_sensor.kitchen_pir").
+        timestamp: When it happened.
+        occupant_id: Optional identity.
+        duration: Optional override duration.
     """
 
     location_id: str
@@ -118,25 +108,17 @@ class OccupancyEvent:
 
 @dataclass(frozen=True)
 class StateTransition:
-    """A record of a state change.
-
-    This helps the Host Integration logging and debugging.
-    """
+    """A record of a state change for debugging."""
 
     location_id: str
     previous_state: LocationRuntimeState
     new_state: LocationRuntimeState
-    reason: str  # "event", "timeout", "propagated", "manual"
+    reason: str
 
 
 @dataclass(frozen=True)
 class EngineResult:
-    """Result from engine operations.
-
-    Attributes:
-        next_expiration: Next datetime when a timeout check is needed.
-        transitions: List of location state transitions that occurred.
-    """
+    """Instructions for the Host Application."""
 
     next_expiration: Optional[datetime]
     transitions: list[StateTransition] = field(default_factory=list)

@@ -22,7 +22,7 @@ def locked_kitchen_config():
         id="kitchen",
         parent_id=None,
         kind=LocationKind.AREA,
-        timeouts={EventType.MOTION: timedelta(minutes=10)},
+        timeouts={"motion": 10},
     )
 
 
@@ -32,8 +32,8 @@ def locked_engine(locked_kitchen_config):
     return OccupancyEngine(configs={"kitchen": locked_kitchen_config})
 
 
-def test_locked_ignores_motion(locked_engine):
-    """Test that LOCKED_FROZEN ignores MOTION events."""
+def test_locked_ignores_pulse(locked_engine):
+    """Test that LOCKED_FROZEN ignores PULSE events."""
     now = datetime(2025, 1, 1, 12, 0, 0)
     states = {
         "kitchen": LocationRuntimeState(
@@ -44,7 +44,9 @@ def test_locked_ignores_motion(locked_engine):
 
     event = OccupancyEvent(
         location_id="kitchen",
-        event_type=EventType.MOTION,
+        event_type=EventType.PULSE,
+        category="motion",
+        source_id="binary_sensor.motion",
         timestamp=now,
     )
 
@@ -67,6 +69,8 @@ def test_locked_allows_manual(locked_engine):
     event = OccupancyEvent(
         location_id="kitchen",
         event_type=EventType.MANUAL,
+        category="manual",
+        source_id="manual_override",
         timestamp=now,
         duration=timedelta(minutes=30),
     )
@@ -75,7 +79,7 @@ def test_locked_allows_manual(locked_engine):
 
     # Should process MANUAL event
     assert len(result.transitions) == 1
-    new_state = result.transitions[0][1]
+    new_state = result.transitions[0].new_state
     assert new_state.is_occupied is True
 
 
@@ -92,6 +96,8 @@ def test_locked_allows_lock_change(locked_engine):
     event = OccupancyEvent(
         location_id="kitchen",
         event_type=EventType.LOCK_CHANGE,
+        category="lock",
+        source_id="lock_control",
         timestamp=now,
     )
 

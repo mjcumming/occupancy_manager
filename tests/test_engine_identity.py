@@ -21,7 +21,7 @@ def identity_config():
         id="kitchen",
         parent_id=None,
         kind=LocationKind.AREA,
-        timeouts={EventType.MOTION: timedelta(minutes=10)},
+        timeouts={"motion": 10},
     )
 
 
@@ -38,7 +38,9 @@ def test_identity_added_on_occupancy(identity_engine):
 
     event = OccupancyEvent(
         location_id="kitchen",
-        event_type=EventType.DOOR,
+        event_type=EventType.PULSE,
+        category="door",
+        source_id="binary_sensor.door",
         timestamp=now,
         occupant_id="person.mike",
     )
@@ -46,7 +48,7 @@ def test_identity_added_on_occupancy(identity_engine):
     result = identity_engine.handle_event(event, now, states)
 
     assert len(result.transitions) == 1
-    new_state = result.transitions[0][1]
+    new_state = result.transitions[0].new_state
     assert "person.mike" in new_state.active_occupants
 
 
@@ -63,7 +65,9 @@ def test_identity_added_on_extend(identity_engine):
 
     event = OccupancyEvent(
         location_id="kitchen",
-        event_type=EventType.MOTION,
+        event_type=EventType.PULSE,
+        category="motion",
+        source_id="binary_sensor.motion",
         timestamp=now,
         occupant_id="person.mike",
     )
@@ -71,7 +75,7 @@ def test_identity_added_on_extend(identity_engine):
     result = identity_engine.handle_event(event, now, states)
 
     assert len(result.transitions) == 1
-    new_state = result.transitions[0][1]
+    new_state = result.transitions[0].new_state
     assert "person.mike" in new_state.active_occupants
     assert "person.jane" in new_state.active_occupants  # Preserved
 
@@ -93,12 +97,10 @@ def test_ghost_mike_scenario(identity_engine):
 
     # Kitchen should go vacant
     kitchen_transitions = [
-        (loc_id, state)
-        for loc_id, state in result.transitions
-        if loc_id == "kitchen"
+        t for t in result.transitions if t.location_id == "kitchen"
     ]
     assert len(kitchen_transitions) == 1
-    new_state = kitchen_transitions[0][1]
+    new_state = kitchen_transitions[0].new_state
 
     # CRITICAL: active_occupants must be cleared
     assert new_state.is_occupied is False
@@ -114,7 +116,7 @@ def test_identity_propagates_to_parent(identity_engine):
             id="kitchen",
             parent_id="main_floor",
             kind=LocationKind.AREA,
-            timeouts={EventType.MOTION: timedelta(minutes=10)},
+            timeouts={"motion": 10},
         ),
         "main_floor": LocationConfig(
             id="main_floor",
@@ -133,7 +135,9 @@ def test_identity_propagates_to_parent(identity_engine):
 
     event = OccupancyEvent(
         location_id="kitchen",
-        event_type=EventType.MOTION,
+        event_type=EventType.PULSE,
+        category="motion",
+        source_id="binary_sensor.motion",
         timestamp=now,
         occupant_id="person.mike",
     )
@@ -142,7 +146,7 @@ def test_identity_propagates_to_parent(identity_engine):
 
     # Find parent state
     main_floor_state = next(
-        state for loc_id, state in result.transitions if loc_id == "main_floor"
+        t.new_state for t in result.transitions if t.location_id == "main_floor"
     )
     assert "person.mike" in main_floor_state.active_occupants
 

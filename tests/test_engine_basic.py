@@ -22,8 +22,8 @@ def kitchen_config():
         parent_id=None,
         kind=LocationKind.AREA,
         timeouts={
-            EventType.MOTION: timedelta(minutes=10),
-            EventType.DOOR: timedelta(minutes=5),
+            "motion": 10,
+            "door": 5,
         },
     )
 
@@ -41,14 +41,16 @@ def test_rule_a_vacant_to_occupied(engine):
 
     event = OccupancyEvent(
         location_id="kitchen",
-        event_type=EventType.MOTION,
+        event_type=EventType.PULSE,
+        category="motion",
+        source_id="binary_sensor.motion",
         timestamp=now,
     )
 
     result = engine.handle_event(event, now, states)
 
     assert len(result.transitions) == 1
-    new_state = result.transitions[0][1]
+    new_state = result.transitions[0].new_state
     assert new_state.is_occupied is True
     assert new_state.occupied_until == now + timedelta(minutes=10)
     assert result.next_expiration == now + timedelta(minutes=10)
@@ -67,7 +69,9 @@ def test_rule_c_ignore_shorter_timer(engine):
 
     event = OccupancyEvent(
         location_id="kitchen",
-        event_type=EventType.MOTION,
+        event_type=EventType.PULSE,
+        category="motion",
+        source_id="binary_sensor.motion",
         timestamp=now,
     )
 
@@ -91,14 +95,16 @@ def test_rule_b_extend_timer(engine):
 
     event = OccupancyEvent(
         location_id="kitchen",
-        event_type=EventType.MOTION,
+        event_type=EventType.PULSE,
+        category="motion",
+        source_id="binary_sensor.motion",
         timestamp=now,
     )
 
     result = engine.handle_event(event, now, states)
 
     assert len(result.transitions) == 1
-    new_state = result.transitions[0][1]
+    new_state = result.transitions[0].new_state
     assert new_state.is_occupied is True
     assert new_state.occupied_until == now + timedelta(minutes=10)
     assert new_state.occupied_until > existing_until

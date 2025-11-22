@@ -22,13 +22,13 @@ def hierarchy_configs():
             id="kitchen",
             parent_id="main_floor",
             kind=LocationKind.AREA,
-            timeouts={EventType.MOTION: timedelta(minutes=10)},
+            timeouts={"motion": 10},
         ),
         "main_floor": LocationConfig(
             id="main_floor",
             parent_id=None,
             kind=LocationKind.VIRTUAL,
-            timeouts={EventType.PROPAGATED: timedelta(minutes=15)},
+            timeouts={"propagated": 15},
         ),
     }
 
@@ -49,20 +49,22 @@ def test_propagation_child_to_parent(hierarchy_engine):
 
     event = OccupancyEvent(
         location_id="kitchen",
-        event_type=EventType.MOTION,
+        event_type=EventType.PULSE,
+        category="motion",
+        source_id="binary_sensor.motion",
         timestamp=now,
     )
 
     result = hierarchy_engine.handle_event(event, now, states)
 
     # Should have transitions for both kitchen and main_floor
-    location_ids = [loc_id for loc_id, _ in result.transitions]
+    location_ids = [t.location_id for t in result.transitions]
     assert "kitchen" in location_ids
     assert "main_floor" in location_ids
 
     # Find the parent state
     parent_state = next(
-        state for loc_id, state in result.transitions if loc_id == "main_floor"
+        t.new_state for t in result.transitions if t.location_id == "main_floor"
     )
     assert parent_state.is_occupied is True
 
@@ -87,23 +89,19 @@ def test_vacancy_does_not_propagate(hierarchy_engine):
 
     # Kitchen should go vacant
     kitchen_transitions = [
-        (loc_id, state)
-        for loc_id, state in result.transitions
-        if loc_id == "kitchen"
+        t for t in result.transitions if t.location_id == "kitchen"
     ]
     if kitchen_transitions:
-        assert kitchen_transitions[0][1].is_occupied is False
+        assert kitchen_transitions[0].new_state.is_occupied is False
 
     # Main floor should NOT be affected (vacancy doesn't propagate)
     main_floor_transitions = [
-        (loc_id, state)
-        for loc_id, state in result.transitions
-        if loc_id == "main_floor"
+        t for t in result.transitions if t.location_id == "main_floor"
     ]
     # Main floor should still be occupied or not in transitions
-    assert len(main_floor_transitions) == 0 or main_floor_transitions[0][
-        1
-    ].is_occupied is True
+    assert len(main_floor_transitions) == 0 or main_floor_transitions[
+        0
+    ].new_state.is_occupied is True
 
 
 def test_propagation_extends_parent_timer(hierarchy_engine):
@@ -123,7 +121,9 @@ def test_propagation_extends_parent_timer(hierarchy_engine):
     # New motion event extends kitchen timer
     event = OccupancyEvent(
         location_id="kitchen",
-        event_type=EventType.MOTION,
+        event_type=EventType.PULSE,
+        category="motion",
+        source_id="binary_sensor.motion",
         timestamp=now,
     )
 
@@ -131,7 +131,7 @@ def test_propagation_extends_parent_timer(hierarchy_engine):
 
     # Main floor should be extended
     main_floor_state = next(
-        state for loc_id, state in result.transitions if loc_id == "main_floor"
+        t.new_state for t in result.transitions if t.location_id == "main_floor"
     )
     assert main_floor_state.is_occupied is True
     assert main_floor_state.occupied_until > now + timedelta(minutes=6)

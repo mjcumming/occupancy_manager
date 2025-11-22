@@ -35,14 +35,14 @@ def engine(kitchen_config):
     return OccupancyEngine(configs={"kitchen": kitchen_config})
 
 
-def test_pulse_event_motion_resets_timer(engine):
-    """Test that MOTION (pulse) events reset/extend the timer."""
+def test_pulse_event_resets_timer(engine):
+    """Test that PULSE events reset/extend the timer."""
     now = datetime(2025, 1, 1, 12, 0, 0)
     states = {"kitchen": LocationRuntimeState(is_occupied=False)}
 
     event = OccupancyEvent(
         location_id="kitchen",
-        event_type=EventType.MOTION,
+        event_type=EventType.PULSE,
         category="motion",
         source_id="binary_sensor.motion",
         timestamp=now,
@@ -51,7 +51,7 @@ def test_pulse_event_motion_resets_timer(engine):
     result = engine.handle_event(event, now, states)
 
     assert len(result.transitions) == 1
-    new_state = result.transitions[0][1]
+    new_state = result.transitions[0].new_state
     assert new_state.is_occupied is True
     assert new_state.occupied_until == now + timedelta(minutes=10)
     assert result.next_expiration == now + timedelta(minutes=10)
@@ -78,7 +78,7 @@ def test_hold_start_pauses_timer(engine):
     result = engine.handle_event(event, now, states)
 
     assert len(result.transitions) == 1
-    new_state = result.transitions[0][1]
+    new_state = result.transitions[0].new_state
     assert new_state.is_occupied is True
     assert new_state.occupied_until is None  # Indefinitely occupied
     assert "binary_sensor.mmwave" in new_state.active_holds
@@ -107,7 +107,7 @@ def test_hold_end_fudge_factor(engine):
     result = engine.handle_event(event, now, states)
 
     assert len(result.transitions) == 1
-    new_state = result.transitions[0][1]
+    new_state = result.transitions[0].new_state
     assert new_state.is_occupied is True
     # Should have 2 minute trailing timeout (fudge factor)
     assert new_state.occupied_until == now + timedelta(minutes=2)
@@ -128,7 +128,7 @@ def test_hold_with_occupants_indefinite(engine):
 
     event = OccupancyEvent(
         location_id="kitchen",
-        event_type=EventType.MOTION,
+        event_type=EventType.PULSE,
         category="motion",
         source_id="binary_sensor.motion",
         timestamp=now,
@@ -137,7 +137,7 @@ def test_hold_with_occupants_indefinite(engine):
     result = engine.handle_event(event, now, states)
 
     assert len(result.transitions) == 1
-    new_state = result.transitions[0][1]
+    new_state = result.transitions[0].new_state
     # Should remain indefinitely occupied due to active_occupants
     assert new_state.occupied_until is None
     assert new_state.is_occupied is True
@@ -163,7 +163,7 @@ def test_multiple_holds(engine):
     )
 
     result1 = engine.handle_event(event1, now, states)
-    new_state1 = result1.transitions[0][1]
+    new_state1 = result1.transitions[0].new_state
     assert len(new_state1.active_holds) == 2
     assert new_state1.occupied_until is None
 
@@ -179,7 +179,7 @@ def test_multiple_holds(engine):
     result2 = engine.handle_event(
         event2, now + timedelta(seconds=1), {"kitchen": new_state1}
     )
-    new_state2 = result2.transitions[0][1]
+    new_state2 = result2.transitions[0].new_state
     assert "binary_sensor.mmwave" not in new_state2.active_holds
     assert "media_player.tv" in new_state2.active_holds
     assert new_state2.occupied_until is None  # Still held by TV
@@ -196,7 +196,7 @@ def test_multiple_holds(engine):
     result3 = engine.handle_event(
         event3, now + timedelta(seconds=2), {"kitchen": new_state2}
     )
-    new_state3 = result3.transitions[0][1]
+    new_state3 = result3.transitions[0].new_state
     assert len(new_state3.active_holds) == 0
     # Should have 5 minute trailing timeout (media category)
     assert new_state3.occupied_until == (now + timedelta(seconds=2)) + timedelta(
@@ -223,7 +223,7 @@ def test_vacancy_cleanup_clears_holds(engine):
         (loc_id, state) for loc_id, state in result.transitions if loc_id == "kitchen"
     ]
     if kitchen_transitions:
-        new_state = kitchen_transitions[0][1]
+        new_state = kitchen_transitions[0].new_state
         assert new_state.is_occupied is False
         assert new_state.active_occupants == set()
         assert new_state.active_holds == set()
@@ -252,7 +252,7 @@ def test_hold_release_with_occupants_no_fudge(engine):
 
     result = engine.handle_event(event, now, states)
 
-    new_state = result.transitions[0][1]
+    new_state = result.transitions[0].new_state
     # Should remain indefinitely occupied due to active_occupants
     assert new_state.occupied_until is None
     assert "person.mike" in new_state.active_occupants
