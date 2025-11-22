@@ -46,7 +46,7 @@ Immutable snapshot.
 
 ### 2.3 The Input (`OccupancyEvent`)
 
-- **`event_type`**: `MOTION` (Pulse), `HOLD_START`, `HOLD_END`, `MANUAL`, `LOCK_CHANGE`.
+- **`event_type`**: `MOMENTARY`, `HOLD_START`, `HOLD_END`, `MANUAL`, `LOCK_CHANGE`.
 
 - **`category`**: Config key for timeout lookup.
 
@@ -88,11 +88,11 @@ A location is **Occupied** if ANY of the following are true:
 
 5. **Parent Followed:** `config.occupancy_strategy == FOLLOW_PARENT` AND `Parent.is_occupied == True`.
 
-### Step 4: Calculate Expiration (Pulse vs Hold Release)
+### Step 4: Calculate Expiration (Momentary vs Hold Release)
 
-- **Pulse (Motion):** `occupied_until = now + timeout`.
+- **Momentary Event:** `occupied_until = now + timeout`. (Transient signal resets timer)
 
-- **Hold Release:** When `active_holds` empties, `occupied_until = now + trailing_timeout`.
+- **Hold Release:** When `active_holds` empties, `occupied_until = now + trailing_timeout`. (Fudge factor applied)
 
 ### Step 5: Vacancy Cleanup
 
@@ -142,7 +142,7 @@ When Parent receives event:
 
 - **`UNLOCKED`**: Normal operation.
 
-- **`LOCKED_FROZEN`**: Ignores all events (Pulse & Hold) except `MANUAL` or `LOCK_CHANGE`.
+- **`LOCKED_FROZEN`**: Ignores all events (Momentary & Hold) except `MANUAL` or `LOCK_CHANGE`.
 
   - Used for: "Don't change anything, just leave it as is."
 
