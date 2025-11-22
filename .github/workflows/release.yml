@@ -1,0 +1,103 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*.*.*"
+
+jobs:
+  release:
+    name: Build and Publish
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      id-token: write  # For PyPI trusted publishing
+    
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Full history for changelog
+      
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+      
+      - name: Install build dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install build twine hatchling
+      
+      - name: Extract version from tag
+        id: version
+        run: |
+          VERSION=${GITHUB_REF#refs/tags/v}
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "Version: $VERSION"
+      
+      - name: Update version in pyproject.toml
+        run: |
+          sed -i "s/^version = \".*\"/version = \"${{ steps.version.outputs.version }}\"/" pyproject.toml
+          cat pyproject.toml | grep version
+      
+      - name: Update version in __init__.py
+        run: |
+          sed -i "s/^__version__ = \".*\"/__version__ = \"${{ steps.version.outputs.version }}\"/" src/occupancy_manager/__init__.py
+          cat src/occupancy_manager/__init__.py | grep __version__
+      
+      - name: Generate changelog
+        id: changelog
+        run: |
+          # Extract changelog from git commits since last tag
+          PREV_TAG=$(git describe --tags --abbrev=0 HEAD~1 2>/dev/null || echo "")
+          if [ -z "$PREV_TAG" ]; then
+            # First release - get all commits
+            CHANGELOG=$(git log --pretty=format:"- %s (%h)" --reverse)
+          else
+            CHANGELOG=$(git log ${PREV_TAG}..HEAD --pretty=format:"- %s (%h)")
+          fi
+          # Escape for GitHub output
+          {
+            echo "changelog<<EOF"
+            echo "$CHANGELOG"
+            echo "EOF"
+          } >> $GITHUB_OUTPUT
+      
+      - name: Create CHANGELOG.md entry
+        run: |
+          mkdir -p .github/release
+          cat > .github/release/CHANGELOG.md << EOF
+          # Changelog
+          
+          ## Version ${{ steps.version.outputs.version }} ($(date +%Y-%m-%d))
+          
+          ${{ steps.changelog.outputs.changelog }}
+          EOF
+          cat .github/release/CHANGELOG.md
+      
+      - name: Run tests
+        run: |
+          pip install -e ".[dev]"
+          pytest
+      
+      - name: Build package
+        run: python -m build
+      
+      - name: Check package
+        run: twine check dist/*
+      
+      - name: Publish to PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          packages-dir: dist/
+      
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v1
+        with:
+          body_path: .github/release/CHANGELOG.md
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+

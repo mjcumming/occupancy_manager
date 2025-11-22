@@ -8,11 +8,13 @@ Occupancy Manager is a pure Python library for managing hierarchical occupancy s
 
 ## Features
 
-- **Hierarchical Location Tracking**: Support for parent-child location relationships
-- **Identity Management**: Track active occupants across locations
-- **Locking Logic**: Freeze location state when needed
+- **Hierarchical Location Tracking**: Support for parent-child location relationships with upward propagation
+- **Identity Management**: Track active occupants across locations with individual arrival/departure handling
+- **Locking Logic**: Freeze location state when needed (party mode)
+- **Multiple Occupancy Strategies**: Independent locations or locations that follow parent state
 - **Time-Agnostic**: All time operations accept `now` as an argument (no system clock access)
 - **Pure Python**: No external dependencies, standard library only
+- **Event Types**: Support for momentary events (motion), holds (presence/radar), and manual overrides
 
 ## Installation
 
@@ -26,7 +28,7 @@ pip install occupancy-manager
 from datetime import datetime, timedelta
 from occupancy_manager import (
     LocationConfig,
-    LocationRuntimeState,
+    LocationKind,
     OccupancyEvent,
     EventType,
     OccupancyEngine,
@@ -35,36 +37,127 @@ from occupancy_manager import (
 # Create location configuration
 kitchen = LocationConfig(
     id="kitchen",
-    timeouts={EventType.MOTION: timedelta(minutes=10)}
+    kind=LocationKind.AREA,
+    timeouts={"motion": 10, "presence": 5}
 )
 
-# Initialize engine
-engine = OccupancyEngine(configs={"kitchen": kitchen})
+# Initialize engine with list of configs
+engine = OccupancyEngine([kitchen])
 
 # Create an event
 now = datetime.now()
 event = OccupancyEvent(
     location_id="kitchen",
-    event_type=EventType.MOTION,
+    event_type=EventType.MOMENTARY,
+    category="motion",
+    source_id="binary_sensor.kitchen_motion",
     timestamp=now,
 )
 
 # Process event
-states = {"kitchen": LocationRuntimeState()}
-result = engine.handle_event(event, now, states)
+result = engine.handle_event(event, now)
 
 # Check for transitions
-for location_id, new_state in result.transitions:
-    print(f"{location_id}: {'occupied' if new_state.is_occupied else 'vacant'}")
+for transition in result.transitions:
+    print(f"{transition.location_id}: {'occupied' if transition.new_state.is_occupied else 'vacant'}")
+    print(f"  Occupants: {transition.new_state.active_occupants}")
+    print(f"  Expires at: {transition.new_state.occupied_until}")
+
+# Check when next timeout check is needed
+if result.next_expiration:
+    print(f"Next timeout check: {result.next_expiration}")
+```
+
+## Identity Tracking Example
+
+```python
+from datetime import datetime
+from occupancy_manager import (
+    LocationConfig,
+    LocationKind,
+    OccupancyEvent,
+    EventType,
+    OccupancyEngine,
+)
+
+# Setup
+kitchen = LocationConfig(id="kitchen", kind=LocationKind.AREA)
+engine = OccupancyEngine([kitchen])
+now = datetime.now()
+
+# Mike arrives (Bluetooth presence start)
+event = OccupancyEvent(
+    location_id="kitchen",
+    event_type=EventType.HOLD_START,
+    category="presence",
+    source_id="ble_mike",
+    timestamp=now,
+    occupant_id="Mike",
+)
+result = engine.handle_event(event, now)
+print(f"Occupants: {engine.state['kitchen'].active_occupants}")  # {'Mike'}
+
+# Marla arrives
+event = OccupancyEvent(
+    location_id="kitchen",
+    event_type=EventType.HOLD_START,
+    category="presence",
+    source_id="ble_marla",
+    timestamp=now,
+    occupant_id="Marla",
+)
+result = engine.handle_event(event, now)
+print(f"Occupants: {engine.state['kitchen'].active_occupants}")  # {'Mike', 'Marla'}
+
+# Mike leaves (Bluetooth presence end)
+event = OccupancyEvent(
+    location_id="kitchen",
+    event_type=EventType.HOLD_END,
+    category="presence",
+    source_id="ble_mike",
+    timestamp=now,
+    occupant_id="Mike",
+)
+result = engine.handle_event(event, now)
+print(f"Occupants: {engine.state['kitchen'].active_occupants}")  # {'Marla'}
+print(f"Still occupied: {engine.state['kitchen'].is_occupied}")  # True
 ```
 
 ## Development
 
 This project uses:
 - Python 3.11+
-- `ruff` for formatting
-- `mypy` for type checking
+- `ruff` for linting and formatting
+- `mypy` for type checking (strict mode)
 - `pytest` for testing
+
+### Setup
+
+```bash
+# Create virtual environment
+python -m venv .venv
+source .venv/bin/activate  # On Windows: .venv\Scripts\activate
+
+# Install in editable mode
+pip install -e .
+
+# Install development dependencies
+pip install -e ".[dev]"
+```
+
+### Running Tests
+
+```bash
+pytest
+```
+
+### Running Linters
+
+```bash
+ruff check .
+ruff format .
+mypy src/
+```
 
 ## License
 

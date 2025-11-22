@@ -70,7 +70,11 @@ If `lock_state` is `LOCKED_FROZEN`:
 
 ### Step 2: Update State (Holds & Identity)
 
-1. **Identity:** Add `occupant_id` to `active_occupants`.
+1. **Identity Logic:**
+   - **Arrival (`HOLD_START` + `occupant_id`):** Add person to `active_occupants`.
+   - **Departure (`HOLD_END` + `occupant_id`):** Remove specific person from `active_occupants`.
+   - **Action (`MOMENTARY` + `occupant_id`):** Add person (inferred presence from button press/lock code).
+   - **Note:** Presence is treated as a continuous state (hold). Individual departures are tracked, allowing one person to leave while others remain.
 
 2. **Hold Logic:** Add/Remove `source_id` from `active_holds`.
 

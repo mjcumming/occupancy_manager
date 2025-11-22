@@ -19,6 +19,16 @@ classifiers = [
 ]
 dependencies = []
 
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0.0",
+    "pytest-cov>=4.0.0",
+    "ruff>=0.1.0",
+    "mypy>=1.0.0",
+    "build>=0.10.0",
+    "twine>=4.0.0",
+]
+
 [tool.hatch.build.targets.wheel]
 packages = ["src/occupancy_manager"]
 
@@ -38,4 +48,8 @@ disallow_untyped_defs = true
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 python_files = ["test_*.py"]
-addopts = "--cov=src/occupancy_manager --cov-report=term-missing"
+addopts = "--cov=src/occupancy_manager --cov-report=term-missing -v --log-cli-level=INFO"
+log_cli = true
+log_cli_level = "INFO"
+log_cli_format = "%(asctime)s [%(levelname)8s] %(name)s: %(message)s"
+log_cli_date_format = "%H:%M:%S"
