@@ -1,65 +1,177 @@
-# Occupancy Manager Specification
+# Occupancy Manager - Technical Design Specification
 
-## 1. Core Architecture
+## 1. System Overview
 
-- **Pattern:** Functional Core (Library), Imperative Shell (Integration).
+**Occupancy Manager** is a hierarchical occupancy tracking engine. It accepts raw inputs (events) from sensors, calculates the state of logical "Locations" (Rooms, Floors, Zones), and maintains a hierarchy where occupancy bubbles up (Child -> Parent).
 
-- **Library:** Pure Python. Stateless. No `asyncio`. No `homeassistant` imports.
+It is designed as a **Pure Python Library** (`library/`) that is hosted by an **Integration** (`custom_components/`). The Library is stateless regarding I/O and time; it receives state and time as inputs and returns state transitions and scheduling instructions as outputs.
 
-- **Integration:** Handles HA Event Bus, Entity Registry, and Timers.
+---
 
-## 2. The "Wake Me Up" Protocol (Inversion of Control)
+## 2. Core Data Structures
 
-The Library does NOT manage timers.
+### 2.1 The Location Configuration (`LocationConfig`)
 
-1. Input: `Engine.handle_event(event, now)`
+Static rules defining a node in the hierarchy.
 
-2. Output: `EngineResult` containing `next_expiration` (datetime) and `transitions`.
+- **`id`** (str): Unique identifier (e.g., "kitchen", "main_floor").
 
-3. Action: Integration schedules `async_track_point_in_time` for `next_expiration`.
+- **`parent_id`** (Optional[str]): The ID of the container location.
 
-4. Callback: When timer fires, Integration calls `Engine.check_timeouts(now)`.
+- **`kind`** (Enum):
 
-## 3. Data Model (Strict Typing)
+  - `AREA`: Represents a physical room (linked to HA Area).
 
-- **LocationConfig:**
-  - `id`: Unique str.
-  - `parent_id`: Optional[str] (Single parent).
-  - `kind`: Enum (AREA / VIRTUAL).
-  - `timeouts`: Base timeout logic.
+  - `VIRTUAL`: Represents a logical container (Floor/Zone).
 
-- **LocationRuntimeState (Frozen):**
-  - `is_occupied`: bool.
-  - `occupied_until`: Optional[datetime].
-  - `active_occupants`: Set[str] (Identity tracking).
-  - `lock_state`: Enum (UNLOCKED / LOCKED_FROZEN).
+- **`timeouts`** (Dict): Base timeout duration (e.g., `{ "motion": 10m, "door": 5m }`).
 
-- **OccupancyEvent:**
-  - `location_id`: str.
-  - `event_type`: Enum (MOTION, DOOR, MEDIA, PRESENCE, MANUAL).
-  - `occupant_id`: Optional[str] (Identity).
-  - `duration`: Optional[timedelta] (Variable duration override, e.g., "Sauna=60m").
+### 2.2 The Runtime State (`LocationRuntimeState`)
 
-## 4. Hierarchy & Propagation Rules
+Immutable snapshot of a location at a specific moment.
 
-- **Occupancy (Bubbles Up):**
-  - If Child becomes Occupied OR extends its timer -> Trigger recursive update to Parent.
-  - Identity (`active_occupants`) also bubbles up.
+- **`is_occupied`** (bool): True if currently occupied.
 
-- **Vacancy (Does NOT Bubble Up):**
-  - Parents have their own independent trailing timers calculated from the last child event.
-  - When a child goes vacant, the parent does nothing until its *own* timer expires.
+- **`occupied_until`** (Optional[datetime]): The wall-clock time when vacancy occurs.
 
-## 5. Locking Logic
+- **`active_occupants`** (Set[str]): A list of verified identities (e.g., "person.mike") currently in the space.
 
-- **LOCKED_FROZEN:**
-  - Ignores all incoming events (Motion, Door, etc).
-  - DOES NOT ignore `MANUAL` events (Overrides).
-  - State remains static until unlocked or manually changed.
+- **`lock_state`** (Enum):
 
-## 6. Coding Standards
+  - `UNLOCKED`: Normal operation.
 
-- Use `frozen=True` for all state dataclasses (Immutable).
+  - `LOCKED_FROZEN`: State is frozen. Ignores all standard events.
 
-- All time math uses the `now` argument passed into functions.
+### 2.3 The Input (`OccupancyEvent`)
 
+A signal from the outside world.
+
+- **`event_type`** (Enum): `MOTION`, `DOOR`, `MEDIA`, `PRESENCE`, `MANUAL`, `LOCK_CHANGE`.
+
+- **`occupant_id`** (Optional[str]): Identity associated with the event (e.g., "Mike" unlocked door).
+
+- **`duration`** (Optional[timedelta]): Overrides the default timeout (e.g., "Sauna" sets 60m).
+
+- **`force_state`** (Optional[bool]):
+
+  - `True`: Force Occupied.
+
+  - `False`: Force Vacant.
+
+  - `None`: Standard calculation.
+
+---
+
+## 3. The Logic Engine (`Engine.handle_event`)
+
+The Engine processes one event at a time. The logic flow is strict:
+
+### Step 1: Lock Check
+
+If `Location.lock_state` is `LOCKED_FROZEN`:
+
+- Is the event type `MANUAL` or `LOCK_CHANGE`?
+
+  - **Yes:** Process the event.
+
+  - **No:** **DROP THE EVENT.** Return no changes.
+
+### Step 2: Timeout Calculation
+
+Determine the `new_expiry` time.
+
+1. If `event.duration` is provided, use it.
+
+2. Else, lookup default timeout for `event.event_type` in `LocationConfig`.
+
+3. `new_expiry = event.timestamp + duration`.
+
+### Step 3: State Transition Rules
+
+Compare `new_expiry` against `current_state.occupied_until`.
+
+- **Rule A (Vacant -> Occupied):**
+
+  - If currently Vacant: Set `is_occupied=True`, `occupied_until=new_expiry`.
+
+  - **Action:** Emit Transition (OCCUPIED). Trigger Propagation.
+
+- **Rule B (Occupied -> Extend):**
+
+  - If currently Occupied AND `new_expiry > current_state.occupied_until`:
+
+  - Update `occupied_until` to `new_expiry`.
+
+  - **Action:** Emit Transition (EXTENDED). Trigger Propagation.
+
+- **Rule C (Occupied -> Ignore):**
+
+  - If currently Occupied AND `new_expiry <= current_state.occupied_until`:
+
+  - Do nothing. The existing timer is longer than the new event.
+
+### Step 4: Identity Logic
+
+- If `event.occupant_id` is present, add it to `state.active_occupants`.
+
+- If `event.force_state` is `False` (Forced Vacancy), clear `active_occupants`.
+
+---
+
+## 4. Hierarchy & Propagation (`_propagate_up`)
+
+Propagation is **Recursive** and **Child-Driven**.
+
+### Trigger
+
+Propagation runs ONLY when a Child Location:
+
+1. Transitions from **Vacant -> Occupied**.
+
+2. Extends its `occupied_until` time.
+
+3. Updates its `active_occupants` list.
+
+### The Propagation Payload
+
+When Child updates, it generates a synthetic event for the Parent:
+
+- **`event_type`**: `PROPAGATED`
+
+- **`duration`**: The *remaining* duration of the Child (Child.occupied_until - now).
+
+- **`occupant_id`**: The occupants of the Child (merged).
+
+### Vacancy Logic (Crucial)
+
+**Vacancy DOES NOT propagate instantly.**
+
+- When a Child goes Vacant, it does *not* force the Parent to go Vacant.
+
+- The Parent relies on its own timer (which was last updated by the Child's previous "Extend" event).
+
+- **Why:** This prevents "Racing Timers" where a Parent goes dark while you are walking between rooms.
+
+---
+
+## 5. The "Wake Me Up" Timer Protocol (Inversion of Control)
+
+The Library strictly avoids internal scheduling.
+
+1. **Calculate:** The Engine determines the earliest `occupied_until` timestamp across all locations.
+
+2. **Return:** The `EngineResult` object includes `next_expiration` (datetime).
+
+3. **Schedule:** The Host (Integration) sees `next_expiration` and uses `async_track_point_in_time` to wake up the Engine.
+
+4. **Callback:** When the timer fires, the Host calls `Engine.check_timeouts(now)`.
+
+---
+
+## 6. Implementation Guidelines
+
+- **Dataclasses:** All state objects must be `frozen=True`. Use `dataclasses.replace()` to create new states.
+
+- **Time:** Never use `datetime.now()`. All functions accept `now` as an argument.
+
+- **Typing:** Strict Python typing is required. No `Any`.

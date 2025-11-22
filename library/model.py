@@ -25,6 +25,8 @@ class EventType(Enum):
     MEDIA = "media"
     PRESENCE = "presence"
     MANUAL = "manual"
+    LOCK_CHANGE = "lock_change"
+    PROPAGATED = "propagated"
 
 
 class LockState(Enum):
@@ -42,13 +44,18 @@ class LocationConfig:
         id: Unique identifier for the location.
         parent_id: Optional parent location ID for hierarchy.
         kind: Type of location (AREA or VIRTUAL).
-        timeout: Base timeout duration for this location.
+        timeouts: Dictionary mapping event types to timeout durations.
     """
 
     id: str
     parent_id: Optional[str] = None
     kind: LocationKind = LocationKind.AREA
-    timeout: timedelta = field(default_factory=lambda: timedelta(minutes=5))
+    timeouts: dict[EventType, timedelta] = field(
+        default_factory=lambda: {
+            EventType.MOTION: timedelta(minutes=10),
+            EventType.DOOR: timedelta(minutes=5),
+        }
+    )
 
 
 @dataclass(frozen=True)
@@ -76,10 +83,12 @@ class OccupancyEvent:
 
     Attributes:
         location_id: The location where the event occurred.
-        event_type: Type of event (MOTION, DOOR, MEDIA, PRESENCE, MANUAL).
+        event_type: Type of event (MOTION, DOOR, MEDIA, PRESENCE, MANUAL,
+            LOCK_CHANGE, PROPAGATED).
         timestamp: When the event occurred.
         occupant_id: Optional identifier for the occupant.
         duration: Optional override duration (e.g., for "Sauna=60m" scenarios).
+        force_state: Optional force state (True=Occupied, False=Vacant, None=Calculate).
     """
 
     location_id: str
@@ -87,6 +96,7 @@ class OccupancyEvent:
     timestamp: datetime
     occupant_id: Optional[str] = None
     duration: Optional[timedelta] = None
+    force_state: Optional[bool] = None
 
 
 @dataclass(frozen=True)
