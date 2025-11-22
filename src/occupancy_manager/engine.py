@@ -16,6 +16,7 @@ from occupancy_manager.model import (
     LockState,
     OccupancyEvent,
     OccupancyStrategy,
+    StateTransition,
 )
 
 
@@ -144,7 +145,18 @@ class OccupancyEngine:
             active_holds=new_holds,
         )
 
-        transitions = [(location_id, new_state)]
+        transitions: list[StateTransition] = []
+        
+        # Only create transition if state actually changed
+        if current_state != new_state:
+            transitions.append(
+                StateTransition(
+                    location_id=location_id,
+                    previous_state=current_state,
+                    new_state=new_state,
+                    reason="event",
+                )
+            )
 
         # Step 4: Propagate if needed (with Backyard filter)
         if self._should_propagate(current_state, new_state):
@@ -155,8 +167,8 @@ class OccupancyEngine:
 
         # Update states dict for result calculation
         updated_states = {**current_states, location_id: new_state}
-        for loc_id, state in transitions:
-            updated_states[loc_id] = state
+        for transition in transitions:
+            updated_states[transition.location_id] = transition.new_state
 
         return self._calculate_result(updated_states, transitions)
 
@@ -174,7 +186,7 @@ class OccupancyEngine:
         Returns:
             EngineResult containing transitions and next expiration time.
         """
-        transitions: list[tuple[str, LocationRuntimeState]] = []
+        transitions: list[StateTransition] = []
         updated_states = dict(current_states)
 
         for location_id, state in current_states.items():
@@ -184,7 +196,7 @@ class OccupancyEngine:
 
             if state.is_occupied and state.occupied_until:
                 if now >= state.occupied_until:
-                    # Step 4: Vacancy Cleanup
+                    # Step 5: Vacancy Cleanup
                     new_state = replace(
                         state,
                         is_occupied=False,
@@ -192,7 +204,14 @@ class OccupancyEngine:
                         active_occupants=set(),
                         active_holds=set(),
                     )
-                    transitions.append((location_id, new_state))
+                    transitions.append(
+                        StateTransition(
+                            location_id=location_id,
+                            previous_state=state,
+                            new_state=new_state,
+                            reason="timeout",
+                        )
+                    )
                     updated_states[location_id] = new_state
 
         return self._calculate_result(updated_states, transitions)
@@ -237,7 +256,7 @@ class OccupancyEngine:
         child_state: LocationRuntimeState,
         now: datetime,
         current_states: dict[str, LocationRuntimeState],
-    ) -> list[tuple[str, LocationRuntimeState]]:
+    ) -> list[StateTransition]:
         """Propagate child state changes to parent location.
 
         Args:
@@ -247,7 +266,7 @@ class OccupancyEngine:
             current_states: Current state of all locations.
 
         Returns:
-            List of (location_id, state) transitions for parent(s).
+            List of state transitions for parent(s).
         """
         config = self._configs.get(location_id)
         if not config or not config.parent_id:
@@ -303,16 +322,26 @@ class OccupancyEngine:
         result = self.handle_event(event, now, {parent_id: parent_state})
 
         # Recursively propagate if parent has changes
-        transitions = result.transitions
-        if transitions:
-            # Get updated parent state
-            for loc_id, state in transitions:
-                if loc_id == parent_id:
-                    # Recursively propagate parent's changes
-                    recursive_transitions = self._propagate_up(
-                        parent_id, state, now, {**current_states, **{loc_id: state}}
-                    )
-                    transitions.extend(recursive_transitions)
+        transitions: list[StateTransition] = []
+        for transition in result.transitions:
+            # Update reason to "propagated" for parent transitions
+            transitions.append(
+                StateTransition(
+                    location_id=transition.location_id,
+                    previous_state=transition.previous_state,
+                    new_state=transition.new_state,
+                    reason="propagated",
+                )
+            )
+            # Recursively propagate parent's changes
+            if transition.location_id == parent_id:
+                recursive_transitions = self._propagate_up(
+                    parent_id,
+                    transition.new_state,
+                    now,
+                    {**current_states, **{transition.location_id: transition.new_state}},
+                )
+                transitions.extend(recursive_transitions)
 
         return transitions
 
@@ -334,7 +363,7 @@ class OccupancyEngine:
     def _calculate_result(
         self,
         states: dict[str, LocationRuntimeState],
-        transitions: Optional[list[tuple[str, LocationRuntimeState]]] = None,
+        transitions: Optional[list[StateTransition]] = None,
     ) -> EngineResult:
         """Calculate next expiration time from all states.
 

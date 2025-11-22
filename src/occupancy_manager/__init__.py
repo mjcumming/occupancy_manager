@@ -10,6 +10,7 @@ from occupancy_manager.model import (
     LockState,
     OccupancyEvent,
     OccupancyStrategy,
+    StateTransition,
 )
 
 __version__ = "0.1.0"
@@ -24,5 +25,6 @@ __all__ = [
     "LockState",
     "OccupancyEvent",
     "OccupancyStrategy",
+    "StateTransition",
 ]
 
