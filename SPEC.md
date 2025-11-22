@@ -154,9 +154,37 @@ The Child sends an event to the Parent:
 
 - When a Child goes Vacant, the Parent does *nothing*. The Parent relies on its own timer.
 
+### Lock Propagation Rule (CRITICAL)
+
+- **Lock State is LOCAL.** It does NOT propagate up or down.
+
+- **However:** If a Child is Locked Occupied, it reports `is_occupied=True` to the Parent.
+
+- **Result:** The Parent will naturally stay Occupied (via standard propagation) but is NOT itself Locked (it can still process its own events).
+
+- **Locking Down:** Locking a Parent does *not* force the Children to wake up. Children maintain independent behavior.
+
 ---
 
-## 5. The "Wake Me Up" Timer Protocol (Inversion of Control)
+## 5. Locking Logic
+
+### 5.1 Lock States
+
+- **`UNLOCKED`**: Normal operation.
+
+- **`LOCKED_FROZEN`**: Ignores all events (Pulse & Hold) except `MANUAL` or `LOCK_CHANGE`.
+
+  - Used for: "Don't change anything, just leave it as is."
+
+### 5.2 Behavior
+
+- **If Locked Occupied:** The Location is effectively in an "Indefinite Hold." It will propagate `is_occupied=True` up the tree.
+
+- **If Locked Vacant:** The Location is effectively disabled. It will not propagate anything.
+
+---
+
+## 6. The "Wake Me Up" Timer Protocol (Inversion of Control)
 
 1. **Calculate:** The Engine scans all locations.
 
