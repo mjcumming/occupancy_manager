@@ -9,7 +9,6 @@ from occupancy_manager.model import (
     EventType,
     LocationConfig,
     LocationKind,
-    LocationRuntimeState,
     LockState,
     OccupancyEvent,
     OccupancyStrategy,
@@ -65,7 +64,10 @@ def test_basic_state_restoration(simple_configs):
     assert engine2.state["kitchen"].is_occupied is True
     assert engine2.state["main_floor"].is_occupied is True
     assert engine2.state["home"].is_occupied is True
-    assert engine2.state["kitchen"].occupied_until == engine1.state["kitchen"].occupied_until
+    assert (
+        engine2.state["kitchen"].occupied_until
+        == engine1.state["kitchen"].occupied_until
+    )
 
 
 def test_restore_with_active_occupants(simple_configs):
@@ -368,4 +370,3 @@ def test_restore_with_occupants_and_holds(simple_configs):
     assert engine2.state["kitchen"].active_occupants == {"Mike"}
     assert "radar" in engine2.state["kitchen"].active_holds
     assert engine2.state["kitchen"].is_occupied is True
-
