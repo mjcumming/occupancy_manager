@@ -41,7 +41,11 @@ class OccupancyEngine:
 
         # Initialize or restore state
         if initial_state:
-            self.state = initial_state
+            self.state = initial_state.copy()
+            # Ensure all config locations exist in state (initialize missing ones)
+            for c in configs:
+                if c.id not in self.state:
+                    self.state[c.id] = LocationRuntimeState()
         else:
             self.state = {
                 c.id: LocationRuntimeState() for c in configs
