@@ -2,14 +2,13 @@
 
 from datetime import datetime, timedelta
 
+from occupancy_manager.engine import OccupancyEngine
 from occupancy_manager.model import (
     EventType,
     LocationConfig,
     LocationKind,
     OccupancyEvent,
 )
-from occupancy_manager.engine import OccupancyEngine
-
 
 # 1. Setup Config
 kitchen = LocationConfig(id="kitchen", kind=LocationKind.AREA)
@@ -39,4 +38,3 @@ print(f"Expires at: {result.next_expiration}")  # Should be Now + 5 seconds
 if result.next_expiration:
     timeout_duration = result.next_expiration - now
     print(f"Timeout duration: {timeout_duration.total_seconds():.2f} seconds")
-

@@ -96,9 +96,7 @@ def test_ghost_mike_scenario(identity_engine):
     result = identity_engine.check_timeouts(now + timedelta(minutes=6), states)
 
     # Kitchen should go vacant
-    kitchen_transitions = [
-        t for t in result.transitions if t.location_id == "kitchen"
-    ]
+    kitchen_transitions = [t for t in result.transitions if t.location_id == "kitchen"]
     assert len(kitchen_transitions) == 1
     new_state = kitchen_transitions[0].new_state
 
@@ -149,4 +147,3 @@ def test_identity_propagates_to_parent(identity_engine):
         t.new_state for t in result.transitions if t.location_id == "main_floor"
     )
     assert "person.mike" in main_floor_state.active_occupants
-

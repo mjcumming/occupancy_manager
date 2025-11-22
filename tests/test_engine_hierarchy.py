@@ -88,9 +88,7 @@ def test_vacancy_does_not_propagate(hierarchy_engine):
     result = hierarchy_engine.check_timeouts(now + timedelta(minutes=6), states)
 
     # Kitchen should go vacant
-    kitchen_transitions = [
-        t for t in result.transitions if t.location_id == "kitchen"
-    ]
+    kitchen_transitions = [t for t in result.transitions if t.location_id == "kitchen"]
     if kitchen_transitions:
         assert kitchen_transitions[0].new_state.is_occupied is False
 
@@ -99,9 +97,10 @@ def test_vacancy_does_not_propagate(hierarchy_engine):
         t for t in result.transitions if t.location_id == "main_floor"
     ]
     # Main floor should still be occupied or not in transitions
-    assert len(main_floor_transitions) == 0 or main_floor_transitions[
-        0
-    ].new_state.is_occupied is True
+    assert (
+        len(main_floor_transitions) == 0
+        or main_floor_transitions[0].new_state.is_occupied is True
+    )
 
 
 def test_propagation_extends_parent_timer(hierarchy_engine):
@@ -135,4 +134,3 @@ def test_propagation_extends_parent_timer(hierarchy_engine):
     )
     assert main_floor_state.is_occupied is True
     assert main_floor_state.occupied_until > now + timedelta(minutes=6)
-

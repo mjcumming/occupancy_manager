@@ -2,8 +2,6 @@
 
 from datetime import datetime, timedelta
 
-import pytest
-
 from occupancy_manager.model import (
     EngineResult,
     EventType,
@@ -118,6 +116,7 @@ def test_engine_result_with_transitions():
     now = datetime(2025, 1, 1, 12, 0, 0)
     state = LocationRuntimeState(is_occupied=True, occupied_until=now)
     from occupancy_manager.model import StateTransition
+
     transition = StateTransition(
         location_id="kitchen",
         previous_state=LocationRuntimeState(),
@@ -131,4 +130,3 @@ def test_engine_result_with_transitions():
     assert len(result.transitions) == 1
     assert result.transitions[0].location_id == "kitchen"
     assert result.transitions[0].new_state.is_occupied is True
-

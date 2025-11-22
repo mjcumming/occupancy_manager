@@ -9,8 +9,8 @@ from occupancy_manager.model import (
     EventType,
     LocationConfig,
     LocationKind,
-    LockState,
     LocationRuntimeState,
+    LockState,
     OccupancyEvent,
 )
 
@@ -106,4 +106,3 @@ def test_locked_allows_lock_change(locked_engine):
     # Should process LOCK_CHANGE event
     # (Even if it doesn't change state, it should not be dropped)
     assert result is not None
-

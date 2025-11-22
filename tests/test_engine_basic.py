@@ -108,4 +108,3 @@ def test_rule_b_extend_timer(engine):
     assert new_state.is_occupied is True
     assert new_state.occupied_until == now + timedelta(minutes=10)
     assert new_state.occupied_until > existing_until
-

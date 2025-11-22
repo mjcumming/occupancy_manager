@@ -256,4 +256,3 @@ def test_hold_release_with_occupants_no_fudge(engine):
     # Should remain indefinitely occupied due to active_occupants
     assert new_state.occupied_until is None
     assert "person.mike" in new_state.active_occupants
-

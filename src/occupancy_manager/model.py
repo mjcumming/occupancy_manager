@@ -7,7 +7,6 @@ All state classes are frozen (immutable) to support functional programming.
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from enum import Enum
-from typing import Optional
 
 
 class LocationKind(Enum):
@@ -57,7 +56,7 @@ class LocationConfig:
     """
 
     id: str
-    parent_id: Optional[str] = None
+    parent_id: str | None = None
     kind: LocationKind = LocationKind.AREA
     occupancy_strategy: OccupancyStrategy = OccupancyStrategy.INDEPENDENT
     contributes_to_parent: bool = True
@@ -77,7 +76,7 @@ class LocationRuntimeState:
     """Runtime state for a location (Immutable)."""
 
     is_occupied: bool = False
-    occupied_until: Optional[datetime] = None
+    occupied_until: datetime | None = None
     active_occupants: set[str] = field(default_factory=set)
     active_holds: set[str] = field(default_factory=set)
     lock_state: LockState = LockState.UNLOCKED
@@ -102,8 +101,8 @@ class OccupancyEvent:
     category: str
     source_id: str
     timestamp: datetime
-    occupant_id: Optional[str] = None
-    duration: Optional[timedelta] = None
+    occupant_id: str | None = None
+    duration: timedelta | None = None
 
 
 @dataclass(frozen=True)
@@ -120,5 +119,5 @@ class StateTransition:
 class EngineResult:
     """Instructions for the Host Application."""
 
-    next_expiration: Optional[datetime]
+    next_expiration: datetime | None
     transitions: list[StateTransition] = field(default_factory=list)

@@ -11,4 +11,3 @@ logging.basicConfig(
 
 # Set the engine logger to INFO level
 logging.getLogger("occupancy_manager.engine").setLevel(logging.INFO)
-

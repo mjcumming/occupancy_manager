@@ -1,16 +1,11 @@
 """Tests for data model v2.0 structures."""
 
-from datetime import datetime, timedelta
-
-import pytest
+from datetime import datetime
 
 from occupancy_manager.model import (
-    EngineResult,
     EventType,
     LocationConfig,
-    LocationKind,
     LocationRuntimeState,
-    LockState,
     OccupancyEvent,
 )
 
@@ -28,7 +23,6 @@ def test_location_config_v2_timeouts():
 
 def test_location_runtime_state_with_holds():
     """Test LocationRuntimeState with active_holds."""
-    now = datetime(2025, 1, 1, 12, 0, 0)
     state = LocationRuntimeState(
         is_occupied=True,
         occupied_until=None,
@@ -91,4 +85,3 @@ def test_event_type_enum_v2():
     assert EventType.MANUAL in EventType
     assert EventType.LOCK_CHANGE in EventType
     assert EventType.PROPAGATED in EventType
-

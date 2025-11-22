@@ -4,16 +4,15 @@ from datetime import datetime, timedelta
 
 import pytest
 
+from occupancy_manager.engine import OccupancyEngine
 from occupancy_manager.model import (
+    EventType,
     LocationConfig,
     LocationKind,
-    OccupancyStrategy,
-    OccupancyEvent,
-    EventType,
     LockState,
-    LocationRuntimeState,
+    OccupancyEvent,
+    OccupancyStrategy,
 )
-from occupancy_manager.engine import OccupancyEngine
 
 
 @pytest.fixture
@@ -145,9 +144,7 @@ def test_party_mode_locking(complex_house_engine):
     now = datetime(2025, 1, 1, 12, 0, 0)
 
     # 1. Trigger Kitchen (Sets timer for +10m)
-    event_motion = OccupancyEvent(
-        "kitchen", EventType.MOMENTARY, "motion", "pir", now
-    )
+    event_motion = OccupancyEvent("kitchen", EventType.MOMENTARY, "motion", "pir", now)
     engine.handle_event(event_motion, now)
 
     assert engine.state["kitchen"].is_occupied is True
@@ -172,7 +169,7 @@ def test_party_mode_locking(complex_house_engine):
     future = now + timedelta(minutes=15)
 
     # Run Garbage Collection
-    result = engine.check_timeouts(future)
+    engine.check_timeouts(future)
 
     # 4. Verify Kitchen is VACANT (It is Independent, and timed out)
     assert engine.state["kitchen"].is_occupied is False
@@ -222,9 +219,7 @@ def test_identity_persistence(complex_house_engine):
     from dataclasses import replace
 
     # Create a new state without the occupant
-    engine.state["kitchen"] = replace(
-        engine.state["kitchen"], active_occupants=set()
-    )
+    engine.state["kitchen"] = replace(engine.state["kitchen"], active_occupants=set())
 
     # Now check timeouts - should go vacant
     engine.check_timeouts(future)
@@ -305,9 +300,7 @@ def test_locked_ignores_momentary_events(complex_house_engine):
     result = engine.handle_event(event_motion, now)
 
     # Should have no transitions (event ignored)
-    kitchen_transitions = [
-        t for t in result.transitions if t.location_id == "kitchen"
-    ]
+    kitchen_transitions = [t for t in result.transitions if t.location_id == "kitchen"]
     assert len(kitchen_transitions) == 0
     assert engine.state["kitchen"].is_occupied is False  # Still vacant
 
@@ -340,9 +333,7 @@ def test_locked_allows_manual_events(complex_house_engine):
     result = engine.handle_event(event_manual, now)
 
     # Should process MANUAL event
-    kitchen_transitions = [
-        t for t in result.transitions if t.location_id == "kitchen"
-    ]
+    kitchen_transitions = [t for t in result.transitions if t.location_id == "kitchen"]
     assert len(kitchen_transitions) == 1
     assert kitchen_transitions[0].new_state.is_occupied is True
 
@@ -372,7 +363,7 @@ def test_locked_ignores_child_propagation(complex_house_engine):
         "pir",
         now,
     )
-    result = engine.handle_event(event_motion, now)
+    engine.handle_event(event_motion, now)
 
     # Kitchen should be occupied
     assert engine.state["kitchen"].is_occupied is True
@@ -420,7 +411,7 @@ def test_locked_toggle(complex_house_engine):
         "pir",
         now,
     )
-    result = engine.handle_event(event_motion, now)
+    engine.handle_event(event_motion, now)
     assert engine.state["kitchen"].is_occupied is True
 
 
@@ -534,7 +525,9 @@ def test_follow_parent_parent_has_identity(complex_house_engine):
     # 2. Living room should follow
     engine.check_timeouts(now)
     assert engine.state["living_room"].is_occupied is True
-    assert engine.state["living_room"].occupied_until is None  # Following parent with identity
+    assert (
+        engine.state["living_room"].occupied_until is None
+    )  # Following parent with identity
 
 
 def test_follow_parent_parent_locked(complex_house_engine):
@@ -720,4 +713,3 @@ def test_identity_departure(complex_house_engine):
     # Logic note: If holds are gone and occupants are gone,
     # the trailing timeout kicks in.
     # For this test, we accept checking occupants are empty.
-
