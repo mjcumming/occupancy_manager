@@ -18,9 +18,9 @@ class LocationKind(Enum):
 
 
 class EventType(Enum):
-    """Type of occupancy event (The Mechanic)."""
+    """The mechanical behavior of an occupancy event."""
 
-    PULSE = "pulse"  # Momentary trigger (Motion, Door Trip) -> Resets timer
+    MOMENTARY = "momentary"  # Transient signal (Motion, Door Trip) -> Resets timer
     HOLD_START = "hold_start"  # Continuous start (Radar, Media Start) -> Pauses timer
     HOLD_END = "hold_end"  # Continuous end (Radar, Media Stop) -> Starts trailing timer
     MANUAL = "manual"  # Direct override
@@ -89,7 +89,7 @@ class OccupancyEvent:
 
     Attributes:
         location_id: Target location.
-        event_type: The mechanic (PULSE vs HOLD).
+        event_type: The mechanic (MOMENTARY vs HOLD).
         category: The config key for looking up timeout (e.g. "motion").
         source_id: Unique device ID (e.g. "binary_sensor.kitchen_pir").
         timestamp: When it happened.

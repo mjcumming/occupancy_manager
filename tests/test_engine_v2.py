@@ -35,14 +35,14 @@ def engine(kitchen_config):
     return OccupancyEngine(configs={"kitchen": kitchen_config})
 
 
-def test_pulse_event_resets_timer(engine):
-    """Test that PULSE events reset/extend the timer."""
+def test_momentary_event_resets_timer(engine):
+    """Test that MOMENTARY events reset/extend the timer."""
     now = datetime(2025, 1, 1, 12, 0, 0)
     states = {"kitchen": LocationRuntimeState(is_occupied=False)}
 
     event = OccupancyEvent(
         location_id="kitchen",
-        event_type=EventType.PULSE,
+        event_type=EventType.MOMENTARY,
         category="motion",
         source_id="binary_sensor.motion",
         timestamp=now,
@@ -128,7 +128,7 @@ def test_hold_with_occupants_indefinite(engine):
 
     event = OccupancyEvent(
         location_id="kitchen",
-        event_type=EventType.PULSE,
+        event_type=EventType.MOMENTARY,
         category="motion",
         source_id="binary_sensor.motion",
         timestamp=now,

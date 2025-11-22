@@ -81,8 +81,8 @@ class OccupancyEngine:
             # Indefinitely occupied
             new_occupied_until = None
         else:
-            # Condition B: Pulse Event
-            if event.event_type == EventType.PULSE:
+            # Condition B: Momentary Event
+            if event.event_type == EventType.MOMENTARY:
                 timeout_minutes = self._get_timeout(event.category, event.location_id)
                 if event.duration:
                     timeout_delta = event.duration

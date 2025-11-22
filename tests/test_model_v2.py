@@ -45,7 +45,7 @@ def test_occupancy_event_v2_required_fields():
     now = datetime(2025, 1, 1, 12, 0, 0)
     event = OccupancyEvent(
         location_id="kitchen",
-        event_type=EventType.PULSE,
+        event_type=EventType.MOMENTARY,
         category="motion",
         source_id="binary_sensor.motion",
         timestamp=now,
@@ -85,7 +85,7 @@ def test_occupancy_event_hold_end():
 
 def test_event_type_enum_v2():
     """Test EventType enum includes v2.0 types."""
-    assert EventType.PULSE in EventType
+    assert EventType.MOMENTARY in EventType
     assert EventType.HOLD_START in EventType
     assert EventType.HOLD_END in EventType
     assert EventType.MANUAL in EventType

@@ -65,13 +65,13 @@ def test_occupancy_event_creation():
     now = datetime(2025, 1, 1, 12, 0, 0)
     event = OccupancyEvent(
         location_id="kitchen",
-        event_type=EventType.PULSE,
+        event_type=EventType.MOMENTARY,
         category="motion",
         source_id="binary_sensor.motion",
         timestamp=now,
     )
     assert event.location_id == "kitchen"
-    assert event.event_type == EventType.PULSE
+    assert event.event_type == EventType.MOMENTARY
     assert event.timestamp == now
     assert event.occupant_id is None
     assert event.duration is None
@@ -82,7 +82,7 @@ def test_occupancy_event_with_occupant():
     now = datetime(2025, 1, 1, 12, 0, 0)
     event = OccupancyEvent(
         location_id="kitchen",
-        event_type=EventType.PULSE,
+        event_type=EventType.MOMENTARY,
         category="door",
         source_id="binary_sensor.door",
         timestamp=now,

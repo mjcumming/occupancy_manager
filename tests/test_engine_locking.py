@@ -32,8 +32,8 @@ def locked_engine(locked_kitchen_config):
     return OccupancyEngine(configs={"kitchen": locked_kitchen_config})
 
 
-def test_locked_ignores_pulse(locked_engine):
-    """Test that LOCKED_FROZEN ignores PULSE events."""
+def test_locked_ignores_momentary(locked_engine):
+    """Test that LOCKED_FROZEN ignores MOMENTARY events."""
     now = datetime(2025, 1, 1, 12, 0, 0)
     states = {
         "kitchen": LocationRuntimeState(
@@ -44,7 +44,7 @@ def test_locked_ignores_pulse(locked_engine):
 
     event = OccupancyEvent(
         location_id="kitchen",
-        event_type=EventType.PULSE,
+        event_type=EventType.MOMENTARY,
         category="motion",
         source_id="binary_sensor.motion",
         timestamp=now,

@@ -41,7 +41,7 @@ def test_rule_a_vacant_to_occupied(engine):
 
     event = OccupancyEvent(
         location_id="kitchen",
-        event_type=EventType.PULSE,
+        event_type=EventType.MOMENTARY,
         category="motion",
         source_id="binary_sensor.motion",
         timestamp=now,
@@ -69,7 +69,7 @@ def test_rule_c_ignore_shorter_timer(engine):
 
     event = OccupancyEvent(
         location_id="kitchen",
-        event_type=EventType.PULSE,
+        event_type=EventType.MOMENTARY,
         category="motion",
         source_id="binary_sensor.motion",
         timestamp=now,
@@ -95,7 +95,7 @@ def test_rule_b_extend_timer(engine):
 
     event = OccupancyEvent(
         location_id="kitchen",
-        event_type=EventType.PULSE,
+        event_type=EventType.MOMENTARY,
         category="motion",
         source_id="binary_sensor.motion",
         timestamp=now,

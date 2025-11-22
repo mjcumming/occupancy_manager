@@ -49,7 +49,7 @@ def test_propagation_child_to_parent(hierarchy_engine):
 
     event = OccupancyEvent(
         location_id="kitchen",
-        event_type=EventType.PULSE,
+        event_type=EventType.MOMENTARY,
         category="motion",
         source_id="binary_sensor.motion",
         timestamp=now,
@@ -121,7 +121,7 @@ def test_propagation_extends_parent_timer(hierarchy_engine):
     # New motion event extends kitchen timer
     event = OccupancyEvent(
         location_id="kitchen",
-        event_type=EventType.PULSE,
+        event_type=EventType.MOMENTARY,
         category="motion",
         source_id="binary_sensor.motion",
         timestamp=now,
