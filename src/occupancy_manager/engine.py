@@ -464,3 +464,103 @@ class OccupancyEngine:
             if "default" in config.timeouts:
                 return config.timeouts["default"]
         return 10  # Final fallback
+
+    def export_state(self) -> dict[str, dict]:
+        """Creates a JSON-serializable dump of the current state.
+
+        Returns:
+            dict: { "kitchen": { "is_occupied": true, "occupied_until": "iso-string", ... } }
+        """
+        dump = {}
+
+        for loc_id, state in self.state.items():
+            # Only dump non-default states to save space
+            # Skip if vacant, unlocked, and no occupants/holds
+            if (
+                not state.is_occupied
+                and state.lock_state == LockState.UNLOCKED
+                and not state.active_occupants
+                and not state.active_holds
+                and state.occupied_until is None
+            ):
+                continue
+
+            dump[loc_id] = {
+                "is_occupied": state.is_occupied,
+                "occupied_until": (
+                    state.occupied_until.isoformat() if state.occupied_until else None
+                ),
+                "active_occupants": list(state.active_occupants),  # Convert Set to List
+                "active_holds": list(state.active_holds),
+                "lock_state": state.lock_state.value,
+            }
+        return dump
+
+    def restore_state(
+        self,
+        snapshot: dict[str, dict],
+        now: datetime,
+        max_age_minutes: int = 15,
+    ) -> None:
+        """Hydrates state from a snapshot with Stale Data Protection.
+
+        Args:
+            snapshot: The data loaded from disk.
+            now: Current wall-clock time.
+            max_age_minutes: Safety valve. If a timer expired > X mins ago, clean it up.
+        """
+        for loc_id, data in snapshot.items():
+            if loc_id not in self.configs:
+                continue
+
+            # 1. Parse Time
+            occupied_until = None
+            if data.get("occupied_until"):
+                try:
+                    occupied_until = datetime.fromisoformat(data["occupied_until"])
+                except (ValueError, TypeError):
+                    pass
+
+            # 2. STALE DATA CHECK (The Critical Logic)
+            should_restore = True
+            is_occupied = data.get("is_occupied", False)
+            lock_state_value = data.get("lock_state", "unlocked")
+            active_occupants = set(data.get("active_occupants", []))
+            active_holds = set(data.get("active_holds", []))
+
+            # Rule A: Locked Frozen states ALWAYS restore (they are timeless)
+            # Check this FIRST before expiration checks
+            if lock_state_value == LockState.LOCKED_FROZEN.value:
+                should_restore = True
+                # Locked states preserve their occupancy state exactly as saved
+                # Don't modify is_occupied or occupied_until for locked states
+
+            # Rule B: Active occupants or holds override expired timers
+            elif active_occupants or active_holds:
+                # If there are active occupants or holds, we trust them
+                # (The integration should verify these are still valid)
+                should_restore = True
+                is_occupied = True
+                # Keep occupied_until as None for holds/occupants
+
+            # Rule C: If it had an expiry time, and that time passed while we were dead...
+            elif occupied_until and occupied_until < now:
+                # It expired while we were restarting.
+                # Force Vacancy unless there are hard Holds/Occupants (which we might verify later)
+                # For safety, we trust the expiry: It is now Vacant.
+                should_restore = False
+                is_occupied = False
+                occupied_until = None
+
+            if should_restore:
+                # Reconstruct the state
+                self.state[loc_id] = LocationRuntimeState(
+                    is_occupied=is_occupied,
+                    occupied_until=occupied_until,
+                    active_occupants=active_occupants,
+                    active_holds=active_holds,
+                    lock_state=LockState(lock_state_value),
+                )
+            else:
+                # Reset to default vacant state
+                self.state[loc_id] = LocationRuntimeState()
