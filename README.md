@@ -19,6 +19,7 @@ Occupancy Manager is a pure Python library for managing hierarchical occupancy s
 - **Locking Logic**: Freeze location state when needed (party mode)
 - **Multiple Occupancy Strategies**: Independent locations or locations that follow parent state
 - **Time-Agnostic**: All time operations accept `now` as an argument (no system clock access)
+- **State Persistence**: Export and restore state with automatic stale data cleanup
 - **Pure Python**: No external dependencies, standard library only
 - **Event Types**: Support for momentary events (motion), holds (presence/radar), and manual overrides
 
@@ -127,6 +128,42 @@ event = OccupancyEvent(
 result = engine.handle_event(event, now)
 print(f"Occupants: {engine.state['kitchen'].active_occupants}")  # {'Marla'}
 print(f"Still occupied: {engine.state['kitchen'].is_occupied}")  # True
+```
+
+## State Persistence
+
+The library supports saving and restoring state for persistence across restarts:
+
+```python
+from datetime import datetime
+import json
+from occupancy_manager import LocationConfig, LocationKind, OccupancyEngine
+
+# Setup
+kitchen = LocationConfig(id="kitchen", kind=LocationKind.AREA)
+engine = OccupancyEngine([kitchen])
+now = datetime.now()
+
+# ... process events ...
+
+# Export state (JSON-serializable)
+snapshot = engine.export_state()
+
+# Save to disk (in your integration)
+with open("state.json", "w") as f:
+    json.dump(snapshot, f)
+
+# On restart, restore state
+with open("state.json", "r") as f:
+    snapshot = json.load(f)
+
+# Restore with stale data protection
+# Expired timers are automatically cleared
+engine2 = OccupancyEngine([kitchen])
+engine2.restore_state(snapshot, datetime.now())
+
+# Locked states and active occupants/holds are preserved
+# Expired timers force vacancy automatically
 ```
 
 ## Development

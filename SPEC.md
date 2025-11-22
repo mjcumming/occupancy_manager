@@ -169,3 +169,49 @@ When Parent receives event:
 2. **Return:** `EngineResult` includes `next_expiration` (Earliest datetime found).
 
 3. **Contract:** Host MUST call `Engine.check_timeouts(now)` at that time.
+
+---
+
+## 7. State Serialization and Hydration
+
+The Library provides methods for exporting and restoring state, enabling persistence across restarts.
+
+### 7.1 Export State (`export_state()`)
+
+Creates a JSON-serializable snapshot of the current engine state.
+
+- **Returns:** `dict[str, dict]` with location IDs as keys
+- **Format:** Each location contains `is_occupied`, `occupied_until` (ISO string), `active_occupants` (list), `active_holds` (list), `lock_state` (string)
+- **Optimization:** Only exports non-default states (skips vacant, unlocked locations with no occupants/holds)
+
+### 7.2 Restore State (`restore_state()`)
+
+Hydrates engine state from a snapshot with **Stale Data Protection**.
+
+**Restoration Rules:**
+
+1. **Locked Frozen States:** Always restore (timeless, for party mode)
+2. **Active Occupants/Holds:** Override expired timers (trust the data)
+3. **Expired Timers:** Force vacancy if `occupied_until < now` (unless occupants/holds present)
+4. **Invalid Data:** Gracefully handles missing locations, invalid datetimes
+
+**Usage:**
+
+```python
+# Host saves state on shutdown
+snapshot = engine.export_state()
+save_to_disk(snapshot)
+
+# Host restores on startup
+snapshot = load_from_disk()
+engine.restore_state(snapshot, dt_util.utcnow())
+engine.check_timeouts(dt_util.utcnow())  # Clean up any about-to-expire timers
+```
+
+### 7.3 Stale Data Protection
+
+The restore process automatically handles stale data:
+
+- **Quick Restart (< timeout):** Everything persists normally
+- **Long Outage (> timeout):** Expired timers cleared, occupants/holds preserved
+- **Locked States:** Always restore regardless of time (timeless)

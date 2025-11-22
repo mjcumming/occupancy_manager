@@ -7,18 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.0] - 2025-01-XX
+
 ### Added
+- **State Serialization and Hydration**: `export_state()` and `restore_state()` methods for persistence
+- **Stale Data Protection**: Automatic cleanup of expired timers on restore
+- **State Restoration Tests**: Comprehensive test suite for serialization (13 tests)
 - Individual occupant departure tracking: `HOLD_END` events with `occupant_id` now remove specific occupants while keeping the room occupied if others remain
 - Comprehensive test suite with complex scenario coverage
 - GitHub Actions CI/CD workflows for linting, testing, and automated releases
 
 ### Changed
 - Identity management now treats presence as a continuous state (hold)
-- Improved documentation with identity tracking examples
+- Improved documentation with identity tracking examples and serialization guide
 
 ### Fixed
 - Bug where individual occupant departures were not processed correctly
 - Room would remain occupied for all occupants until the last person left
+- Partial state restoration now auto-initializes missing locations
 
 ## [0.1.0] - 2025-01-XX
 
