@@ -14,33 +14,52 @@ The Library does NOT manage timers.
 
 1. Input: `Engine.handle_event(event, now)`
 
-2. Output: `EngineResult` containing `next_expiration` (datetime).
+2. Output: `EngineResult` containing `next_expiration` (datetime) and `transitions`.
 
-3. Action: Integration schedules `async_track_point_in_time` for that datetime.
+3. Action: Integration schedules `async_track_point_in_time` for `next_expiration`.
 
 4. Callback: When timer fires, Integration calls `Engine.check_timeouts(now)`.
 
 ## 3. Data Model (Strict Typing)
 
-- `LocationConfig`: id, parent_id (optional), kind (AREA/VIRTUAL), timeouts.
+- **LocationConfig:**
+  - `id`: Unique str.
+  - `parent_id`: Optional[str] (Single parent).
+  - `kind`: Enum (AREA / VIRTUAL).
+  - `timeouts`: Base timeout logic.
 
-- `LocationRuntimeState` (Frozen): is_occupied, occupied_until, active_occupants (Set[str]), lock_state.
+- **LocationRuntimeState (Frozen):**
+  - `is_occupied`: bool.
+  - `occupied_until`: Optional[datetime].
+  - `active_occupants`: Set[str] (Identity tracking).
+  - `lock_state`: Enum (UNLOCKED / LOCKED_FROZEN).
 
-- `OccupancyEvent`: location_id, event_type, timestamp, occupant_id (optional), duration (optional).
+- **OccupancyEvent:**
+  - `location_id`: str.
+  - `event_type`: Enum (MOTION, DOOR, MEDIA, PRESENCE, MANUAL).
+  - `occupant_id`: Optional[str] (Identity).
+  - `duration`: Optional[timedelta] (Variable duration override, e.g., "Sauna=60m").
 
-## 4. Propagation Rules
+## 4. Hierarchy & Propagation Rules
 
-- **Occupancy:** Bubbles up (Child -> Parent).
+- **Occupancy (Bubbles Up):**
+  - If Child becomes Occupied OR extends its timer -> Trigger recursive update to Parent.
+  - Identity (`active_occupants`) also bubbles up.
 
-- **Vacancy:** Does NOT bubble up. Parents expire on their own calculated timers.
+- **Vacancy (Does NOT Bubble Up):**
+  - Parents have their own independent trailing timers calculated from the last child event.
+  - When a child goes vacant, the parent does nothing until its *own* timer expires.
 
-- **Locking:** `LOCKED_FROZEN` ignores all events except `MANUAL`.
+## 5. Locking Logic
 
-## 5. Coding Standards
+- **LOCKED_FROZEN:**
+  - Ignores all incoming events (Motion, Door, etc).
+  - DOES NOT ignore `MANUAL` events (Overrides).
+  - State remains static until unlocked or manually changed.
 
-- Use `ruff` formatting.
+## 6. Coding Standards
 
-- Use `frozen=True` for all state dataclasses.
+- Use `frozen=True` for all state dataclasses (Immutable).
 
 - All time math uses the `now` argument passed into functions.
 
