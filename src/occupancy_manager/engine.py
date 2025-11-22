@@ -465,7 +465,7 @@ class OccupancyEngine:
                 return config.timeouts["default"]
         return 10  # Final fallback
 
-    def export_state(self) -> dict[str, dict]:
+    def export_state(self) -> dict[str, dict[str, str | bool | list[str] | None]]:
         """Creates a JSON-serializable dump of the current state.
 
         Returns:
@@ -498,7 +498,7 @@ class OccupancyEngine:
 
     def restore_state(
         self,
-        snapshot: dict[str, dict],
+        snapshot: dict[str, dict[str, str | bool | list[str] | None]],
         now: datetime,
         max_age_minutes: int = 15,
     ) -> None:
