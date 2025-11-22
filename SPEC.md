@@ -1,10 +1,10 @@
-# Occupancy Manager - Library Specification (v2.0)
+# Occupancy Manager - Library Specification (v4.0)
 
 ## 1. System Overview
 
 **Occupancy Manager** is a hierarchical occupancy tracking engine. It accepts raw inputs (events) from sensors, calculates the state of logical "Locations" (Rooms, Floors, Zones), and maintains a hierarchy where occupancy bubbles up (Child -> Parent).
 
-This is a **Pure Python Library** (`src/occupancy_manager`). It is agnostic to the host platform (Home Assistant/CLI). It creates no threads and performs no I/O.
+This is a **Pure Python Library** (`src/occupancy_manager`). It is agnostic to the host platform.
 
 ---
 
@@ -12,17 +12,23 @@ This is a **Pure Python Library** (`src/occupancy_manager`). It is agnostic to t
 
 ### 2.1 The Location Configuration (`LocationConfig`)
 
-Static rules defining a node in the hierarchy.
-
 - **`id`** (str): Unique identifier.
 
-- **`parent_id`** (Optional[str]): The ID of the container location.
+- **`parent_id`** (Optional[str]): Container location.
 
-- **`timeouts`** (Dict[str, int]): Mapping of event categories to minutes.
+- **`occupancy_strategy`** (Enum):
 
-  - e.g., `{ "motion": 10, "presence": 2, "media": 5 }`
+  - `INDEPENDENT` (Default): Occupied only by own sensors or child propagation.
 
-  - *Note:* For "Hold" sources (Presence/Media), this value serves as the **Trailing Timeout** (Fudge Factor) applied when the hold is released.
+  - `FOLLOW_PARENT`: Occupied if own sensors trigger OR if Parent is Occupied. (Solves the "Living Room with no sensors" problem).
+
+- **`contributes_to_parent`** (bool):
+
+  - Default `True`.
+
+  - If `False`, occupancy here DOES NOT bubble up. (Solves the "Backyard" problem).
+
+- **`timeouts`** (Dict[str, int]): Base timeouts (e.g., `{ "motion": 10 }`).
 
 ### 2.2 The Runtime State (`LocationRuntimeState`)
 
@@ -32,27 +38,23 @@ Immutable snapshot.
 
 - **`occupied_until`** (Optional[datetime]): The wall-clock time when vacancy occurs.
 
-  - *Note:* If `active_holds` is non-empty, this is ignored/irrelevant.
+- **`active_occupants`** (Set[str]): Verified identities (e.g., "Mike").
 
-- **`active_occupants`** (Set[str]): Verified identities (e.g., "Mike") currently in the space.
-
-- **`active_holds`** (Set[str]): Unique IDs of sources currently holding the room open (e.g., "binary_sensor.mmwave", "media_player.tv").
+- **`active_holds`** (Set[str]): Sources holding the room open (e.g., Radar, Media).
 
 - **`lock_state`** (Enum): `UNLOCKED` vs `LOCKED_FROZEN`.
 
 ### 2.3 The Input (`OccupancyEvent`)
 
-A signal from the outside world.
+- **`event_type`**: `MOTION` (Pulse), `HOLD_START`, `HOLD_END`, `MANUAL`, `LOCK_CHANGE`.
 
-- **`event_type`** (Enum): `MOTION` (Pulse), `HOLD_START`, `HOLD_END`, `MANUAL`, `LOCK_CHANGE`.
+- **`category`**: Config key for timeout lookup.
 
-- **`category`** (str): The config key to lookup timeout (e.g., "motion", "presence").
+- **`source_id`**: Device ID.
 
-- **`source_id`** (str): Unique ID of the device (e.g., "binary_sensor.radar").
+- **`occupant_id`**: Optional identity.
 
-- **`occupant_id`** (Optional[str]): Identity associated with the event.
-
-- **`duration`** (Optional[timedelta]): Overrides the default timeout.
+- **`duration`**: Optional override.
 
 ---
 
@@ -64,67 +66,41 @@ If `lock_state` is `LOCKED_FROZEN`:
 
 - Ignore all events EXCEPT `MANUAL` or `LOCK_CHANGE`.
 
+- **Crucial:** If a Child propagates occupancy to a Locked Parent, the Parent IGNORES it.
+
 ### Step 2: Update State (Holds & Identity)
 
-1. **Identity:** If `occupant_id` is present:
+1. **Identity:** Add `occupant_id` to `active_occupants`.
 
-   - Add to `active_occupants` (Persists until Vacancy).
+2. **Hold Logic:** Add/Remove `source_id` from `active_holds`.
 
-2. **Hold Logic:**
+### Step 3: Determine Occupancy Status
 
-   - If `event_type == HOLD_START`: Add `source_id` to `active_holds`.
+A location is **Occupied** if ANY of the following are true:
 
-   - If `event_type == HOLD_END`: Remove `source_id` from `active_holds`.
+1. **Timer Active:** `now < occupied_until`.
 
-### Step 3: Calculate Expiration (The "Fudge Factor" Logic)
+2. **Hold Active:** `active_holds` is not empty.
 
-We determine the new `occupied_until` timestamp.
+3. **Identity Present:** `active_occupants` is not empty.
 
-**Condition A: Room is being Held**
+4. **Child Propagated:** A child location is reporting Occupancy (AND `Child.contributes_to_parent == True`).
 
-- If `active_holds` is NOT empty OR `active_occupants` is NOT empty:
+5. **Parent Followed:** `config.occupancy_strategy == FOLLOW_PARENT` AND `Parent.is_occupied == True`.
 
-- The room is **Indefinitely Occupied**.
+### Step 4: Calculate Expiration (Pulse vs Hold Release)
 
-- `occupied_until` = `None`.
+- **Pulse (Motion):** `occupied_until = now + timeout`.
 
-- `is_occupied` = `True`.
+- **Hold Release:** When `active_holds` empties, `occupied_until = now + trailing_timeout`.
 
-**Condition B: Pulse Event (Motion)**
+### Step 5: Vacancy Cleanup
 
-- If `event_type == MOTION`:
-
-- Lookup timeout for `category` (default: 10m).
-
-- `new_expiry = now + timeout`.
-
-- Extend `occupied_until` if `new_expiry > current`.
-
-**Condition C: Hold Release (The Fudge Factor)**
-
-- If `event_type == HOLD_END` AND `active_holds` became empty:
-
-- We do NOT vacate immediately.
-
-- Lookup trailing timeout for `category` (default: 2m).
-
-- `occupied_until = now + timeout`.
-
-### Step 4: Vacancy Cleanup
-
-- If state transitions to Vacant (via timeout check or manual force):
-
-- Clear `active_occupants`.
-
-- Clear `active_holds` (Force reset).
-
-- `occupied_until` = `None`.
+- If transitioning to Vacant: Clear `active_occupants` and `active_holds`.
 
 ---
 
 ## 4. Hierarchy & Propagation
-
-Propagation is **Recursive** and **Child-Driven**.
 
 ### The Trigger
 
@@ -132,33 +108,27 @@ Propagation runs when a Child Location:
 
 1. Transitions Vacant -> Occupied.
 
-2. Extends its time (or enters "Indefinite Hold").
+2. Extends its time.
 
 3. Updates its `active_occupants`.
 
-### The Payload (Synthetic Event)
+### The "Backyard" Filter
 
-The Child sends an event to the Parent:
+Before propagating, check `Child.config.contributes_to_parent`.
 
-- **`event_type`**: `PROPAGATED`
+- If `False`: **STOP.** Do not send synthetic event to Parent.
 
-- **`category`**: "propagated"
+### The "Lock" Filter
 
-- **`source_id`**: Child Location ID.
+When Parent receives event:
 
-- **`active_holds`**: If Child is held, Parent treats it as a Hold.
-
-### Vacancy Logic
-
-- **Vacancy DOES NOT bubble up.**
-
-- When a Child goes Vacant, the Parent does *nothing*. The Parent relies on its own timer.
+- If Parent is `LOCKED_FROZEN`: **STOP.** Ignore the child update.
 
 ### Lock Propagation Rule (CRITICAL)
 
 - **Lock State is LOCAL.** It does NOT propagate up or down.
 
-- **However:** If a Child is Locked Occupied, it reports `is_occupied=True` to the Parent.
+- **However:** If a Child is Locked Occupied, it reports `is_occupied=True` to the Parent (if `contributes_to_parent == True`).
 
 - **Result:** The Parent will naturally stay Occupied (via standard propagation) but is NOT itself Locked (it can still process its own events).
 
@@ -178,7 +148,7 @@ The Child sends an event to the Parent:
 
 ### 5.2 Behavior
 
-- **If Locked Occupied:** The Location is effectively in an "Indefinite Hold." It will propagate `is_occupied=True` up the tree.
+- **If Locked Occupied:** The Location is effectively in an "Indefinite Hold." It will propagate `is_occupied=True` up the tree (if `contributes_to_parent == True`).
 
 - **If Locked Vacant:** The Location is effectively disabled. It will not propagate anything.
 

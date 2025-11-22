@@ -15,6 +15,7 @@ from occupancy_manager.model import (
     LocationRuntimeState,
     LockState,
     OccupancyEvent,
+    OccupancyStrategy,
 )
 
 
@@ -71,15 +72,13 @@ class OccupancyEngine:
         elif event.event_type == EventType.HOLD_END:
             new_holds.discard(event.source_id)
 
-        # Step 3: Calculate Expiration (Fudge Factor Logic)
+        # Step 3: Calculate Expiration (Pulse vs Hold Release)
         new_occupied_until: Optional[datetime] = current_state.occupied_until
-        new_is_occupied = current_state.is_occupied
 
         # Condition A: Room is being Held
         if new_holds or new_occupants:
             # Indefinitely occupied
             new_occupied_until = None
-            new_is_occupied = True
         else:
             # Condition B: Pulse Event (Motion)
             if event.event_type == EventType.MOTION:
@@ -97,7 +96,6 @@ class OccupancyEngine:
                     or new_expiry > current_state.occupied_until
                 ):
                     new_occupied_until = new_expiry
-                    new_is_occupied = True
 
             # Condition C: Hold Release (The Fudge Factor)
             elif event.event_type == EventType.HOLD_END:
@@ -110,10 +108,32 @@ class OccupancyEngine:
                         timeout_delta = timedelta(minutes=timeout_minutes)
 
                     new_occupied_until = event.timestamp + timeout_delta
+
+        # Step 3 (continued): Determine Occupancy Status
+        # A location is Occupied if ANY of the following are true:
+        # 1. Timer Active: now < occupied_until
+        # 2. Hold Active: active_holds is not empty
+        # 3. Identity Present: active_occupants is not empty
+        # 4. Child Propagated: (handled in propagation)
+        # 5. Parent Followed: (handled below)
+        new_is_occupied = False
+
+        # Check conditions 1-3
+        if new_holds or new_occupants:
+            new_is_occupied = True
+        elif new_occupied_until and now < new_occupied_until:
+            new_is_occupied = True
+
+        # Condition 5: Parent Followed
+        config = self._configs.get(location_id)
+        if config and config.occupancy_strategy == OccupancyStrategy.FOLLOW_PARENT:
+            if config.parent_id:
+                parent_state = current_states.get(config.parent_id)
+                if parent_state and parent_state.is_occupied:
                     new_is_occupied = True
-                elif not new_holds and not current_state.active_holds:
-                    # Already empty, no change
-                    pass
+                    # If following parent and parent is held, this location is also held
+                    if parent_state.active_holds or parent_state.active_occupants:
+                        new_occupied_until = None
 
         # Create new state
         new_state = replace(
@@ -126,7 +146,7 @@ class OccupancyEngine:
 
         transitions = [(location_id, new_state)]
 
-        # Step 4: Propagate if needed
+        # Step 4: Propagate if needed (with Backyard filter)
         if self._should_propagate(current_state, new_state):
             prop_transitions = self._propagate_up(
                 location_id, new_state, now, {**current_states, location_id: new_state}
@@ -233,11 +253,26 @@ class OccupancyEngine:
         if not config or not config.parent_id:
             return []
 
+        # The "Backyard" Filter: Check contributes_to_parent
+        if not config.contributes_to_parent:
+            # STOP. Do not send synthetic event to Parent.
+            return []
+
         parent_id = config.parent_id
         if parent_id not in current_states:
             current_states[parent_id] = LocationRuntimeState()
 
         parent_state = current_states[parent_id]
+
+        # The "Lock" Filter: If Parent is LOCKED_FROZEN, ignore child update
+        if parent_state.lock_state == LockState.LOCKED_FROZEN:
+            # STOP. Ignore the child update.
+            return []
+
+        # Only propagate if child is actually occupied
+        if not child_state.is_occupied:
+            # Child is vacant - don't propagate (vacancy doesn't bubble up)
+            return []
 
         # Create synthetic event for parent
         # If child is held, parent treats it as a hold
@@ -262,7 +297,6 @@ class OccupancyEngine:
                 duration=remaining,
             )
         else:
-            # Child is vacant - don't propagate (vacancy doesn't bubble up)
             return []
 
         # Process event for parent

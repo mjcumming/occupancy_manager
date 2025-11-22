@@ -35,6 +35,13 @@ class LockState(Enum):
     LOCKED_FROZEN = "locked_frozen"
 
 
+class OccupancyStrategy(Enum):
+    """Occupancy strategy for a location."""
+
+    INDEPENDENT = "independent"  # Occupied only by own sensors or child propagation
+    FOLLOW_PARENT = "follow_parent"  # Occupied if own sensors trigger OR if Parent is Occupied
+
+
 @dataclass(frozen=True)
 class LocationConfig:
     """Configuration for a location.
@@ -43,6 +50,8 @@ class LocationConfig:
         id: Unique identifier for the location.
         parent_id: Optional parent location ID for hierarchy.
         kind: Type of location (AREA or VIRTUAL).
+        occupancy_strategy: Strategy for determining occupancy.
+        contributes_to_parent: If False, occupancy does not bubble up to parent.
         timeouts: Dictionary mapping event categories to timeout minutes.
             For Hold sources, this is the trailing timeout (fudge factor).
     """
@@ -50,6 +59,8 @@ class LocationConfig:
     id: str
     parent_id: Optional[str] = None
     kind: LocationKind = LocationKind.AREA
+    occupancy_strategy: OccupancyStrategy = OccupancyStrategy.INDEPENDENT
+    contributes_to_parent: bool = True
     timeouts: dict[str, int] = field(
         default_factory=lambda: {
             "motion": 10,
