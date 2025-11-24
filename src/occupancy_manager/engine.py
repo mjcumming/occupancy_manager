@@ -371,11 +371,7 @@ class OccupancyEngine:
             # Note: While held, occupied_until is technically irrelevant
             # until the hold releases, but we keep the underlying timer if set.
 
-        # 3. Identity Present
-        if next_occupants:
-            is_occupied_candidate = True
-
-        # 4. Strategy: FOLLOW_PARENT
+        # 3. Strategy: FOLLOW_PARENT
         if config.occupancy_strategy == OccupancyStrategy.FOLLOW_PARENT:
             if config.parent_id:
                 parent_state = self.state.get(config.parent_id)

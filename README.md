@@ -128,6 +128,11 @@ event = OccupancyEvent(
 result = engine.handle_event(event, now)
 print(f"Occupants: {engine.state['kitchen'].active_occupants}")  # {'Marla'}
 print(f"Still occupied: {engine.state['kitchen'].is_occupied}")  # True
+
+# Note on Identity and Occupancy:
+# Identity is treated as metadata.
+# - If added via MOMENTARY event (Door Unlock), the room will time out naturally.
+# - If added via HOLD_START event (Beacon/Camera), the room stays occupied until HOLD_END.
 ```
 
 ## State Persistence

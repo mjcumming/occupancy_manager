@@ -86,7 +86,10 @@ A location is **Occupied** if ANY of the following are true:
 
 2. **Hold Active:** `active_holds` is not empty.
 
-3. **Identity Present:** `active_occupants` is not empty.
+3. **Identity Present:** `active_occupants` is not empty (ONLY if associated with a Hold).
+   - **Note:** `active_occupants` is treated as metadata. It does not inherently cause occupancy unless the event type implies a Hold.
+   - **Momentary Event + Identity:** Sets a timer. Room goes Vacant when timer expires.
+   - **Hold Event + Identity:** Sets a hold. Room stays Occupied until Hold releases.
 
 4. **Child Propagated:** A child location is reporting Occupancy (AND `Child.contributes_to_parent == True`).
 

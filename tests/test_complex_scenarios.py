@@ -207,24 +207,12 @@ def test_identity_persistence(complex_house_engine):
     future = now + timedelta(hours=2)
     engine.check_timeouts(future)
 
-    # 3. Kitchen should STILL be occupied because occupant hasn't left
-    assert engine.state["kitchen"].is_occupied is True
-    assert "person.mike" in engine.state["kitchen"].active_occupants
-
-    # 4. Explicit Vacancy (Occupant leaves)
-    # We can simulate this by manually clearing the occupant via a MANUAL event
-    # with duration=0, or we can directly test that timeout logic clears occupants
-    # when there's no timer and no holds. Let's test the timeout cleanup:
-    # First, manually clear the occupant to simulate leaving
-    from dataclasses import replace
-
-    # Create a new state without the occupant
-    engine.state["kitchen"] = replace(engine.state["kitchen"], active_occupants=set())
-
-    # Now check timeouts - should go vacant
-    engine.check_timeouts(future)
+    # 3. Kitchen should be VACANT because identity is ephemeral (metadata)
+    #    and timer has expired.
     assert engine.state["kitchen"].is_occupied is False
     assert engine.state["kitchen"].active_occupants == set()
+
+    # 4. (Removed manual clearance test as it's now redundant)
 
 
 def test_sauna_variable_duration(complex_house_engine):
