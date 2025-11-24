@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.0] - 2025-11-24
+
+### Changed
+- **BREAKING**: Identity is now treated as ephemeral metadata, not a cause of occupancy
+  - `active_occupants` no longer forces `is_occupied = True`
+  - Momentary events (door unlock, motion) with identity will timeout naturally
+  - Hold events (BLE beacon, camera) with identity keep room occupied until hold releases
+  - This prevents "Ghost Mike" scenarios where rooms stay occupied indefinitely
+  - Identity is cleared when room goes vacant (automatic cleanup)
+
+### Fixed
+- Fixed "Sticky Identity" bug where momentary events with identity would keep rooms occupied forever
+- Rooms now properly timeout even when occupants are present (if no active holds)
+
 ## [0.2.0] - 2025-01-XX
 
 ### Added

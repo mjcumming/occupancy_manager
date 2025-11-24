@@ -48,9 +48,7 @@ class OccupancyEngine:
                 if c.id not in self.state:
                     self.state[c.id] = LocationRuntimeState()
         else:
-            self.state = {
-                c.id: LocationRuntimeState() for c in configs
-            }
+            self.state = {c.id: LocationRuntimeState() for c in configs}
 
         # Build Parent -> Children map for "FOLLOW_PARENT" logic (Downward)
         self.children_map: dict[str, list[str]] = {}
@@ -91,9 +89,7 @@ class OccupancyEngine:
                     if not transition.previous_state.is_occupied
                     else "OCCUPIED"
                 )
-                new_state = (
-                    "OCCUPIED" if transition.new_state.is_occupied else "VACANT"
-                )
+                new_state = "OCCUPIED" if transition.new_state.is_occupied else "VACANT"
                 _LOGGER.info(
                     f"  {transition.location_id}: {prev_state} -> {new_state} "
                     f"({transition.reason})"
@@ -147,12 +143,9 @@ class OccupancyEngine:
                     if not transition.previous_state.is_occupied
                     else "OCCUPIED"
                 )
-                new_state = (
-                    "OCCUPIED" if transition.new_state.is_occupied else "VACANT"
-                )
+                new_state = "OCCUPIED" if transition.new_state.is_occupied else "VACANT"
                 _LOGGER.info(
-                    f"  {transition.location_id}: {prev_state} -> {new_state} "
-                    f"(timeout)"
+                    f"  {transition.location_id}: {prev_state} -> {new_state} (timeout)"
                 )
 
         return EngineResult(

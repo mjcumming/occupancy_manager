@@ -5,7 +5,7 @@ build-backend = "hatchling.build"
 [project]
 name = "occupancy-manager"
 description = "A hierarchical occupancy tracking engine with locking and identity logic."
-version = "0.2.0"
+version = "0.3.0"
 readme = "README.md"
 requires-python = ">=3.11"
 authors = [
